@@ -39,19 +39,30 @@ const sidebarItems: Array<SidebarItem> = [
 
 const MENU_BUTTON = 'h-11 gap-3 px-4 text-base [&>svg]:size-5';
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  /** Marca da academia; sem ela, a do sistema. */
+  logoUrl?: string | null;
+  tenantName?: string | null;
+}
+
+export function AppSidebar({ logoUrl, tenantName }: AppSidebarProps) {
   const path = usePathname();
+  const logo = logoUrl ?? '/images/logo.png';
+
   return (
     <Sidebar>
       <SidebarHeader>
         {/* o nome vai no alt: some da tela, mas segue no leitor de tela */}
         <div className="flex h-28 w-full items-center px-4">
           <Image
-            src="/images/logo.png"
-            alt="Team Sartorato"
+            src={logo}
+            alt={tenantName ?? 'Team Sartorato'}
             width={300}
             height={300}
-            className="h-20 w-auto"
+            /* logo do cliente mora no Blob, fora do projeto: o otimizador do
+               Next não conhece esse host */
+            unoptimized={logo.startsWith('http')}
+            className="h-20 w-auto object-contain"
           />
         </div>
       </SidebarHeader>

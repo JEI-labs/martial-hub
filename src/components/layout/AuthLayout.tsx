@@ -1,31 +1,52 @@
 import * as React from 'react';
 
 import Image from 'next/image';
-import { ScrollArea } from '../ui/scroll-area';
 
-export function AuthLayout({
+import { ScrollArea } from '../ui/scroll-area';
+import { getCurrentTenant } from '@/server/tenant/resolve';
+import { TenantTheme } from '@/components/theme/tenantTheme.component';
+
+/**
+ * Moldura do login. Server Component de propósito: o endereço diz qual
+ * academia é a casa, então a tela já abre com a logo, a foto e a cor do
+ * cliente — antes de alguém digitar a senha.
+ */
+export async function AuthLayout({
   children,
-}: Readonly<{ children: React.ReactNode }>): React.JSX.Element {
+}: Readonly<{ children: React.ReactNode }>): Promise<React.JSX.Element> {
+  const tenant = await getCurrentTenant();
+
+  const imagem = tenant?.branding?.loginImageUrl ?? '/images/thaiboxe.jpg';
+  const logo = tenant?.branding?.logoUrl ?? '/images/logo.png';
+
   return (
     <div className="grid h-screen w-screen lg:grid-cols-2">
+      <TenantTheme primaryColor={tenant?.branding?.primaryColor} />
+
       <div className="bg-muted hidden h-screen w-full overflow-hidden lg:block">
         <Image
-          src="/images/thaiboxe.jpg"
-          alt="Image"
+          src={imagem}
+          alt={tenant ? `Academia ${tenant.name}` : 'Imagem de fundo'}
           width="1920"
           height="1080"
+          /* Imagem do cliente vem do Blob, de fora do projeto: sem o unoptimized
+             o loader do Next tentaria otimizar um host que ele não conhece. */
+          unoptimized={imagem.startsWith('http')}
           className="bg-muted-background h-full w-full object-cover"
         />
       </div>
+
       <ScrollArea>
         <div className="flex min-h-screen w-full items-center">
           <div className="mx-auto flex h-fit max-w-[70%] min-w-[40%] flex-col gap-8 py-4">
             <div className="mb-[-30px] flex items-center justify-center">
               <Image
-                src="/images/logo.png"
+                src={logo}
                 width={350}
                 height={350}
-                alt="Logo"
+                unoptimized={logo.startsWith('http')}
+                alt={tenant ? `Logo da ${tenant.name}` : 'Logo'}
+                className="h-auto max-h-[180px] w-auto object-contain"
               />
             </div>
             {children}

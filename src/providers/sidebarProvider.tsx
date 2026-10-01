@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 
 import { AppSidebar } from '@/components/layout/sidebar';
 import { SidebarProvider } from '@/components/ui/sidebar';
+import { getCurrentTenant } from '@/server/tenant/resolve';
 
 /** Igual a SIDEBAR_COOKIE_NAME em components/ui/sidebar.tsx */
 const SIDEBAR_COOKIE_NAME = 'sidebar_state';
@@ -17,9 +18,14 @@ export default async function AppSidebarProvider({
   const cookieStore = await cookies();
   const defaultOpen = cookieStore.get(SIDEBAR_COOKIE_NAME)?.value !== 'false';
 
+  const tenant = await getCurrentTenant();
+
   return (
     <SidebarProvider className="bg-background" defaultOpen={defaultOpen}>
-      <AppSidebar />
+      <AppSidebar
+        logoUrl={tenant?.branding?.logoUrl}
+        tenantName={tenant?.name}
+      />
       {children}
     </SidebarProvider>
   );

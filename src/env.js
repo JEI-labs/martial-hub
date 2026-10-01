@@ -32,6 +32,12 @@ export const env = createEnv({
     EVOLUTION_API_KEY: z.string().optional(),
     /** Segredo da rota que dispara as mensagens automáticas. */
     CRON_SECRET: z.string().optional(),
+    /**
+     * Domínio onde moram os subdomínios das academias
+     * (`academia.seusistema.com.br`). Sem ele, só domínio cadastrado resolve —
+     * é o caso do ambiente local.
+     */
+    ROOT_DOMAIN: z.string().optional(),
   },
 
   /**
@@ -57,6 +63,7 @@ export const env = createEnv({
     EVOLUTION_BASE_URL: process.env.EVOLUTION_BASE_URL,
     EVOLUTION_API_KEY: process.env.EVOLUTION_API_KEY,
     CRON_SECRET: process.env.CRON_SECRET,
+    ROOT_DOMAIN: process.env.ROOT_DOMAIN,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially
