@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Building2, FileText, LayoutDashboard } from 'lucide-react';
+import { Building2, FileText, LayoutDashboard, ShieldUser } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 
@@ -10,6 +10,7 @@ const menu = [
   { href: '/master', label: 'Painel', icon: LayoutDashboard },
   { href: '/master/clientes', label: 'Clientes', icon: Building2 },
   { href: '/master/faturas', label: 'Faturas', icon: FileText },
+  { href: '/master/equipe', label: 'Equipe', icon: ShieldUser },
 ];
 
 /**

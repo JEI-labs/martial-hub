@@ -511,6 +511,39 @@ export const masterRouter = createTRPCRouter({
       return { ok: true };
     }),
 
+  /**
+   * Quem administra o sistema.
+   *
+   * Conta de master abre todas as academias de uma vez, então saber quantas
+   * existem e se cada uma tem a segunda chave é parte de cuidar do sistema —
+   * não um detalhe de configuração.
+   */
+  listMasters: masterProcedure.query(async ({ ctx }) => {
+    const masters = await ctx.prisma.user.findMany({
+      where: { role: EUserRole.MASTER },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        createdAt: true,
+        /* Só a data em que ligou: segredo e códigos de recuperação são de
+           cada um, e não saem daqui nem para outro master. */
+        twoFactorEnabledAt: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return masters.map(({ twoFactorEnabledAt, ...master }) => ({
+      ...master,
+      souEu: master.id === ctx.session.user.id,
+      /* Master é sempre obrigado: nunca existe o estado "opcional" aqui. */
+      doisFatores: twoFactorEnabledAt
+        ? ('ativo' as const)
+        : ('pendente' as const),
+      doisFatoresDesde: twoFactorEnabledAt,
+    }));
+  }),
+
   /* -------------------------------------------------------------- faturas */
 
   listInvoices: masterProcedure
