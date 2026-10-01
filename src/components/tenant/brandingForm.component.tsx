@@ -15,6 +15,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { CopyButton } from '@/components/ui/copy-button';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { api } from '@/trpc/react';
@@ -152,16 +153,26 @@ export function BrandingForm() {
           {tenant?.domains.length ? (
             <div className="space-y-2">
               <Label>Endereços</Label>
-              <div className="flex flex-wrap gap-2">
+              <p className="text-muted-foreground text-xs">
+                É por aqui que a sua equipe e os seus alunos entram.
+              </p>
+
+              <div className="flex flex-col gap-2">
                 {tenant.domains.map((dominio) => (
-                  <span
+                  <div
                     key={dominio.hostname}
-                    className="bg-muted/60 text-muted-foreground rounded-full px-3 py-1 text-xs"
+                    className="bg-muted/60 flex flex-wrap items-center gap-3 rounded-xl px-3 py-2"
                   >
-                    {dominio.hostname}
-                    {dominio.isPrimary && ' · principal'}
-                    {!dominio.verifiedAt && ' · aguardando DNS'}
-                  </span>
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      {dominio.hostname}
+                      <span className="text-muted-foreground">
+                        {dominio.isPrimary && ' · principal'}
+                        {!dominio.verifiedAt && ' · aguardando DNS'}
+                      </span>
+                    </span>
+
+                    <CopyButton value={`https://${dominio.hostname}`} />
+                  </div>
                 ))}
               </div>
             </div>

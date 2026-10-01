@@ -18,6 +18,7 @@ import {
 import { EmptyState } from '@/components/emptyState/emptyState.component';
 import { ListSkeleton } from '@/components/skeletons/listSkeleton.component';
 import { NewTenantDialog } from '@/components/master/newTenantDialog.component';
+import { CopyButton } from '@/components/ui/copy-button';
 import { TENANT_STATUS } from '@/common/constants/tenantStatus';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/trpc/react';
@@ -141,7 +142,23 @@ export function TenantsTable() {
                     </TableCell>
 
                     <TableCell className="text-muted-foreground text-xs">
-                      {principal?.hostname ?? '—'}
+                      {principal ? (
+                        <span className="flex items-center gap-2">
+                          {principal.hostname}
+                          {/* O endereço existe para ser mandado ao cliente:
+                              copiá-lo é a ação seguinte a olhá-lo. */}
+                          <CopyButton
+                            value={`https://${principal.hostname}`}
+                            label=""
+                            variant="ghost"
+                            size="icon"
+                            className="[&>svg]:mr-0"
+                            aria-label={`Copiar link de ${tenant.name}`}
+                          />
+                        </span>
+                      ) : (
+                        '—'
+                      )}
                     </TableCell>
 
                     <TableCell className="text-right">

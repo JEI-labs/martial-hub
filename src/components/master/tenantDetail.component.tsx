@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { CopyButton } from '@/components/ui/copy-button';
 import { InvoicesPanel } from '@/components/master/invoicesPanel.component';
 import { ROLE_INFO } from '@/common/constants/roles';
 import {
@@ -246,6 +247,11 @@ export function TenantDetail({ tenantId }: { tenantId: string }) {
                   {dominio.verifiedAt ? 'DNS conferido' : 'aguardando DNS'}
                 </p>
               </div>
+
+              <CopyButton
+                value={`https://${dominio.hostname}`}
+                label="Copiar link"
+              />
 
               <Button
                 size="sm"
