@@ -39,7 +39,9 @@ import {
   MessagesCard,
   TopOverdueList,
 } from '@/components/dashboard/dashboardLists.component';
+import { BillingAlert } from '@/components/tenant/billingAlert.component';
 import { api } from '@/trpc/react';
+import { useSession } from 'next-auth/react';
 import { maskBRL } from '@/utils/masksUtils';
 
 const breadcrumbItems = [
@@ -50,6 +52,7 @@ const breadcrumbItems = [
 const defaultRange = getLastYearRange();
 
 export default function DashboardPage() {
+  const { data: session } = useSession();
   const [range, setRange] = useState<{ from?: string; to?: string }>({
     from: defaultRange.from.toISOString(),
     to: defaultRange.to.toISOString(),
@@ -114,6 +117,10 @@ export default function DashboardPage() {
             }
           />
         </div>
+
+        {/* Conta a pagar do próprio sistema: assunto do dono, não da
+            recepção. */}
+        {session?.user.role === 'OWNER' && <BillingAlert />}
 
         {isLoading || !data ? (
           <div className="flex flex-col gap-6">
