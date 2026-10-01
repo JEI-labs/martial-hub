@@ -1,3 +1,4 @@
+import { NOME_DO_SISTEMA } from '@/common/constants/sistema';
 import { createTRPCRouter, sessionProcedure } from '@/server/api/trpc';
 import { TRPCError } from '@trpc/server';
 import { hash, verify } from 'argon2';
@@ -51,7 +52,9 @@ export const securityRouter = createTRPCRouter({
     const { uri, qr } = await gerarQrCode(
       segredo,
       user.email,
-      user.tenant?.name ?? 'Thai-Boxe Manager',
+      /* O nome que aparece no autenticador: a academia de quem é da
+         academia, e o nosso para quem é dono do sistema. */
+      user.tenant?.name ?? NOME_DO_SISTEMA,
     );
 
     /* O segredo em texto acompanha o QR porque nem todo aplicativo lê câmera,

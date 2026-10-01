@@ -1,3 +1,4 @@
+import { NOME_DO_SISTEMA } from '@/common/constants/sistema';
 import { AuthLayout } from '@/components/layout/AuthLayout';
 import { LoginForm } from '@/components/auth/loginForm.component';
 import { getCurrentTenant } from '@/server/tenant/resolve';
@@ -12,12 +13,12 @@ export default async function LoginPage() {
   return (
     <AuthLayout>
       <LoginForm
-        title={
+        title={tenant ? `Bem-vindo à ${tenant.name}` : NOME_DO_SISTEMA}
+        subtitle={
           tenant
-            ? `Bem-vindo à ${tenant.name}`
-            : 'Bem-vindo ao Thai-Boxe Manager'
+            ? 'Entre com a sua conta'
+            : 'Painel do sistema. Acesso restrito a quem o administra.'
         }
-        subtitle={tenant ? 'Entre com a sua conta' : 'Painel do sistema'}
       />
     </AuthLayout>
   );

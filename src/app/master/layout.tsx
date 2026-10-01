@@ -1,6 +1,7 @@
 import { EUserRole } from '@prisma/client';
 import { redirect } from 'next/navigation';
 
+import { NOME_DO_SISTEMA } from '@/common/constants/sistema';
 import { getServerAuthSession } from '@/server/auth';
 import { getCurrentTenant, masterHost } from '@/server/tenant/resolve';
 import { exigeDoisFatores, temDoisFatores } from '@/server/auth/twoFactor';
@@ -46,7 +47,7 @@ export default async function MasterLayout({
       <header className="bg-card shadow-card sticky top-0 z-10">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-3">
           <div className="flex items-center gap-6">
-            <span className="font-semibold">Thai-Boxe Manager</span>
+            <span className="font-semibold">{NOME_DO_SISTEMA}</span>
 
             <MasterNav />
           </div>

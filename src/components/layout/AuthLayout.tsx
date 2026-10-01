@@ -2,6 +2,8 @@ import * as React from 'react';
 
 import Image from 'next/image';
 
+import { ShieldCheck } from 'lucide-react';
+
 import { ScrollArea } from '../ui/scroll-area';
 import { getCurrentTenant } from '@/server/tenant/resolve';
 import { TenantTheme } from '@/components/theme/tenantTheme.component';
@@ -20,23 +22,38 @@ export async function AuthLayout({
 }: Readonly<{ children: React.ReactNode }>): Promise<React.JSX.Element> {
   const tenant = await getCurrentTenant();
 
-  /* Sem academia no endereço é a porta do próprio sistema, e aí a marca do
-     sistema é a certa. Com academia e sem marca enviada, o lugar fica
-     reservado — a da Thaiboxe não serve para cliente nenhum. */
-  const imagem = tenant
-    ? tenant.branding?.loginImageUrl
-    : '/images/thaiboxe.jpg';
-  const logo = tenant ? tenant.branding?.logoUrl : '/images/logo.png';
+  /* Endereço sem academia é a porta de serviço do próprio sistema: o painel
+     do dono. Ela não leva marca nenhuma — as imagens que estavam aqui são de
+     uma academia específica, e mostrar o cliente de alguém na entrada do
+     sistema é o oposto de whitelabel. */
+  if (!tenant) {
+    return (
+      <div className="bg-background flex min-h-screen w-full items-center justify-center p-6">
+        <div className="flex w-full max-w-sm flex-col gap-8">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <span className="bg-muted text-muted-foreground flex size-12 items-center justify-center rounded-full">
+              <ShieldCheck className="size-6" aria-hidden />
+            </span>
+          </div>
+
+          {children}
+        </div>
+      </div>
+    );
+  }
+
+  const imagem = tenant.branding?.loginImageUrl;
+  const logo = tenant.branding?.logoUrl;
 
   return (
     <div className="grid h-screen w-screen lg:grid-cols-2">
-      <TenantTheme primaryColor={tenant?.branding?.primaryColor} />
+      <TenantTheme primaryColor={tenant.branding?.primaryColor} />
 
       <div className="bg-muted hidden h-screen w-full overflow-hidden lg:block">
         {imagem ? (
           <Image
             src={imagem}
-            alt={tenant ? `Academia ${tenant.name}` : 'Imagem de fundo'}
+            alt={`Academia ${tenant.name}`}
             width="1920"
             height="1080"
             /* Imagem do cliente vem do Blob, de fora do projeto: sem o
@@ -60,7 +77,7 @@ export async function AuthLayout({
                   width={350}
                   height={350}
                   unoptimized={logo.startsWith('http')}
-                  alt={tenant ? `Logo da ${tenant.name}` : 'Logo'}
+                  alt={`Logo da ${tenant.name}`}
                   className="h-auto max-h-[180px] w-auto object-contain"
                 />
               ) : (
