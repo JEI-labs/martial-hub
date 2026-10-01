@@ -48,10 +48,12 @@ export function LoginForm({
     username: z
       .string()
       .email('Por favor, insira um endereço de e-mail válido.'),
+    /* Sem teto: aqui a senha não está sendo criada, está sendo conferida.
+       Um limite nesta tela só serve para trancar do lado de fora quem tem uma
+       senha mais longa do que o limite de ontem. */
     password: z
       .string()
-      .min(6, { message: 'A senha deve ter pelo menos 6 caracteres.' })
-      .max(20, { message: 'A senha pode ter no máximo 20 caracteres.' }),
+      .min(6, { message: 'A senha deve ter pelo menos 6 caracteres.' }),
   });
 
   const router = useRouter();

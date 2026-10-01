@@ -131,7 +131,10 @@ export const tenantRouter = createTRPCRouter({
       z.object({
         name: z.string().min(2, 'Nome muito curto').max(80),
         email: z.string().email('E-mail inválido'),
-        password: z.string().min(6, 'A senha precisa de pelo menos 6 letras'),
+        password: z
+          .string()
+          .min(6, 'A senha precisa de pelo menos 6 letras')
+          .max(72),
         role: z.nativeEnum(EUserRole).refine((r) => r !== EUserRole.MASTER, {
           message: 'Papel inválido',
         }),
