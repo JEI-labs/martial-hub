@@ -197,15 +197,23 @@ model SupportAccess {
 }
 
 model User {
-  id        String    @id @default(uuid())
-  name      String
+  id       String    @id @default(uuid())
+  name     String
   /// Único dentro da academia, não no sistema inteiro: a mesma pessoa pode
   /// ter conta em duas academias, e o login resolve pelo host.
-  email     String
-  password  String
-  role      EUserRole @default(OWNER)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  email    String
+  password String
+  role     EUserRole @default(OWNER)
+
+  /// Segredo TOTP em base32. Nulo enquanto a pessoa não configurou.
+  twoFactorSecret        String?
+  /// Quando a verificação em duas etapas passou a valer para esta conta.
+  twoFactorEnabledAt     DateTime?
+  /// Códigos de recuperação, guardados como hash — servem uma vez cada e são
+  /// a única saída de quem perdeu o celular.
+  twoFactorRecoveryCodes String[]  @default([])
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   /// Nulo só para o MASTER, que é o dono do sistema e não pertence a academia
   /// nenhuma.

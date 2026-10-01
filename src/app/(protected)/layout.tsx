@@ -10,6 +10,8 @@ import AppSidebarProvider from '@/providers/sidebarProvider';
 import { getServerAuthSession } from '@/server/auth';
 import { getCurrentTenant } from '@/server/tenant/resolve';
 import { temFaturaVencida } from '@/server/billing/invoices';
+import { exigeDoisFatores, temDoisFatores } from '@/server/auth/twoFactor';
+import { TwoFactorRequired } from '@/components/security/twoFactorRequired.component';
 import { TenantBlocked } from '@/components/layout/tenantBlocked.component';
 import { SupportBanner } from '@/components/layout/supportBanner.component';
 import { BillingBanner } from '@/components/tenant/billingBanner.component';
@@ -59,6 +61,15 @@ export default async function DashboardLayout({
     const porFatura = await temFaturaVencida(tenant.id);
 
     return <TenantBlocked tenantName={tenant.name} porFatura={porFatura} />;
+  }
+
+  /* Dono de academia sem segunda etapa não entra: é a conta que abre tudo. A
+     parede vem antes do sistema, não como aviso dentro dele. */
+  if (
+    exigeDoisFatores(session.user.role) &&
+    !(await temDoisFatores(session.user.id))
+  ) {
+    return <TwoFactorRequired nome={session.user.name} />;
   }
 
   return (

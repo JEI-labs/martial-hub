@@ -89,6 +89,9 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         username: { label: 'Usuário', type: 'username' },
         password: { label: 'Senha', type: 'password' },
+        /* Segunda etapa: vazio na primeira tentativa, preenchido quando a
+           tela volta pedindo o código. */
+        totp: { label: 'Código', type: 'text' },
       },
       authorize,
     }),

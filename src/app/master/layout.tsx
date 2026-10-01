@@ -6,6 +6,8 @@ import { LogOut } from 'lucide-react';
 import { env } from '@/env';
 import { getServerAuthSession } from '@/server/auth';
 import { getCurrentTenant } from '@/server/tenant/resolve';
+import { exigeDoisFatores, temDoisFatores } from '@/server/auth/twoFactor';
+import { TwoFactorRequired } from '@/components/security/twoFactorRequired.component';
 import { ThemeToggler } from '@/components/theme/theme-toggler';
 import { MasterNav } from '@/components/master/masterNav.component';
 
@@ -31,6 +33,15 @@ export default async function MasterLayout({
     redirect(
       env.ROOT_DOMAIN ? `https://app.${env.ROOT_DOMAIN}/master` : '/painel',
     );
+  }
+
+  /* O dono do sistema enxerga todas as academias; sem segunda etapa, uma
+     senha vazada entregaria todas de uma vez. */
+  if (
+    exigeDoisFatores(session.user.role) &&
+    !(await temDoisFatores(session.user.id))
+  ) {
+    return <TwoFactorRequired nome={session.user.name} />;
   }
 
   return (

@@ -152,6 +152,23 @@ export const protectedProcedure = t.procedure
   });
 
 /**
+ * Autenticado e nada além: serve para o que é da conta, não da academia —
+ * perfil e verificação em duas etapas. `protectedProcedure` exige tenant, e o
+ * dono do sistema não tem nenhum.
+ */
+export const sessionProcedure = t.procedure
+  .use(timingMiddleware)
+  .use(({ ctx, next }) => {
+    if (!ctx.session?.user) {
+      throw new TRPCError({ code: 'UNAUTHORIZED' });
+    }
+
+    return next({
+      ctx: { session: { ...ctx.session, user: ctx.session.user } },
+    });
+  });
+
+/**
  * Quem pode o quê.
  *
  * MASTER entra em tudo porque é quem dá suporte. OWNER manda na academia.

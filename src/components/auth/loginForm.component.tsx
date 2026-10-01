@@ -34,6 +34,10 @@ export function LoginForm({
   const [seePass, setSeePass] = useState(false);
   const [disabled, setDisabled] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  /* A primeira tentativa vai sem código: só quem tem a segunda etapa ligada
+     precisa dele, e perguntar antes assustaria quem não tem. */
+  const [pedindoCodigo, setPedindoCodigo] = useState(false);
+  const [codigo, setCodigo] = useState('');
 
   const PasswordIcon = seePass ? EyeOff : Eye;
 
@@ -59,9 +63,25 @@ export function LoginForm({
 
   async function onSubmit(data: z.infer<typeof formSchema>) {
     setDisabled(true);
-    const result = await signIn('credentials', { ...data, redirect: false });
+    const result = await signIn('credentials', {
+      ...data,
+      totp: codigo,
+      redirect: false,
+    });
+
+    if (result?.error === '2FA_REQUIRED') {
+      setPedindoCodigo(true);
+      setErrorMessage('');
+      setDisabled(false);
+      return;
+    }
+
     if (result && result.status === 401) {
-      setErrorMessage('E-mail ou senha incorreto.');
+      setErrorMessage(
+        pedindoCodigo
+          ? 'Código inválido. Tente o próximo que aparecer no aplicativo.'
+          : 'E-mail ou senha incorreto.',
+      );
     } else if (result && result.status === 200) {
       setErrorMessage('');
       form.reset();
@@ -125,6 +145,31 @@ export function LoginForm({
                   />
                 }
               />
+              {pedindoCodigo && (
+                <div className="space-y-2">
+                  <label
+                    htmlFor="codigo"
+                    className="text-foreground text-sm font-medium"
+                  >
+                    Código do aplicativo
+                  </label>
+                  <input
+                    id="codigo"
+                    inputMode="numeric"
+                    maxLength={10}
+                    autoFocus
+                    placeholder="000000"
+                    value={codigo}
+                    onChange={(event) => setCodigo(event.target.value)}
+                    className="border-input bg-background focus-visible:ring-ring h-14 w-full rounded-full border px-4 text-center text-lg tracking-[0.3em] focus-visible:ring-2 focus-visible:outline-none"
+                  />
+                  <p className="text-muted-foreground text-xs">
+                    Seis dígitos do seu autenticador. Perdeu o celular? Use um
+                    código de recuperação.
+                  </p>
+                </div>
+              )}
+
               <Link
                 href="/auth/forgotpassword"
                 className="text-primary text-xs hover:underline"
@@ -146,7 +191,7 @@ export function LoginForm({
               disabled={disabled}
             >
               {disabled && <LoaderCircle className="mr-1 h-5 animate-spin" />}
-              Entrar
+              {pedindoCodigo ? 'Confirmar código' : 'Entrar'}
               <ArrowRight size={18} className="ml-1" />
             </Button>
           </div>

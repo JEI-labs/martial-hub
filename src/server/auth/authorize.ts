@@ -7,13 +7,18 @@ import { verify } from 'argon2';
 import lodash from 'lodash';
 import { ETenantStatus, EUserRole, type Prisma } from '@prisma/client';
 import { getTenantByHost } from '@/server/tenant/resolve';
+import { prisma as db } from '../db';
+import { conferirCodigo, usarCodigoDeRecuperacao } from './twoFactor';
+
+/** A tela de login reconhece esta mensagem e passa a pedir o código. */
+export const PRECISA_DE_CODIGO = '2FA_REQUIRED';
 
 type RequisicaoDeLogin = {
   headers?: Record<string, string | undefined> | undefined;
 };
 
 export async function authorize(
-  credentials: Record<'username' | 'password', string> | undefined,
+  credentials: Record<'username' | 'password' | 'totp', string> | undefined,
   req?: RequisicaoDeLogin,
 ): Promise<User | null> {
   let creds;
@@ -62,6 +67,9 @@ export async function authorize(
       password: true,
       tenantId: true,
       role: true,
+      twoFactorSecret: true,
+      twoFactorEnabledAt: true,
+      twoFactorRecoveryCodes: true,
     },
   });
 
@@ -70,5 +78,38 @@ export async function authorize(
   const isValidPassword = await verify(user.password, creds.password);
   if (!isValidPassword) return null;
 
-  return lodash.omit(user, ['password']) as User;
+  /* Segunda etapa. A senha certa sem o código não entra — e quem ainda não
+     configurou passa, porque é o layout que o leva para a configuração; barrar
+     aqui deixaria o dono trancado para fora do próprio sistema. */
+  const precisa = Boolean(user.twoFactorEnabledAt && user.twoFactorSecret);
+
+  if (precisa) {
+    const codigo = credentials?.totp?.trim() ?? '';
+
+    if (!codigo) throw new Error(PRECISA_DE_CODIGO);
+
+    const porAplicativo = conferirCodigo(user.twoFactorSecret!, codigo);
+
+    if (!porAplicativo) {
+      /* Código de recuperação: oito dígitos com hífen, serve uma vez. */
+      const recuperacao = await usarCodigoDeRecuperacao(
+        user.twoFactorRecoveryCodes,
+        codigo,
+      );
+
+      if (!recuperacao.ok) return null;
+
+      await db.user.update({
+        where: { id: user.id },
+        data: { twoFactorRecoveryCodes: recuperacao.restantes },
+      });
+    }
+  }
+
+  return lodash.omit(user, [
+    'password',
+    'twoFactorSecret',
+    'twoFactorRecoveryCodes',
+    'twoFactorEnabledAt',
+  ]) as User;
 }
