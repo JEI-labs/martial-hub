@@ -20,17 +20,28 @@ import { cn } from '@/lib/utils';
 import { api } from '@/trpc/react';
 import { blobUrlToBase64 } from '@/common/utils/files';
 import { hexToHslTriple, hslTripleToHex } from '@/utils/colorUtils';
+import { ThemePreview } from '@/components/tenant/themePreview.component';
 
 /** Cores prontas, para quem não quer abrir o seletor. */
 const SUGESTOES = [
   { nome: 'Terracota', hsl: '9 60% 50%' },
   { nome: 'Vermelho', hsl: '0 72% 48%' },
-  { nome: 'Laranja', hsl: '25 85% 50%' },
-  { nome: 'Âmbar', hsl: '38 92% 50%' },
-  { nome: 'Verde', hsl: '142 70% 38%' },
+  { nome: 'Carmim', hsl: '345 75% 45%' },
+  { nome: 'Rosa', hsl: '330 80% 58%' },
+  { nome: 'Roxo', hsl: '275 65% 55%' },
+  { nome: 'Violeta', hsl: '255 70% 58%' },
   { nome: 'Azul', hsl: '221 83% 53%' },
-  { nome: 'Roxo', hsl: '262 70% 55%' },
-  { nome: 'Grafite', hsl: '240 6% 30%' },
+  { nome: 'Azul-marinho', hsl: '220 70% 35%' },
+  { nome: 'Ciano', hsl: '190 80% 42%' },
+  { nome: 'Esmeralda', hsl: '172 70% 36%' },
+  { nome: 'Verde', hsl: '142 70% 38%' },
+  { nome: 'Verde-limão', hsl: '95 60% 40%' },
+  { nome: 'Oliva', hsl: '75 50% 35%' },
+  { nome: 'Âmbar', hsl: '38 92% 48%' },
+  { nome: 'Laranja', hsl: '25 85% 50%' },
+  { nome: 'Marrom', hsl: '20 45% 35%' },
+  { nome: 'Grafite', hsl: '240 6% 32%' },
+  { nome: 'Chumbo', hsl: '215 20% 35%' },
 ];
 
 type CampoImagem = 'logoUrl' | 'loginImageUrl';
@@ -107,13 +118,6 @@ export function BrandingForm() {
       setEnviando(null);
     }
   };
-
-  /* A prévia troca só a variável do bloco, então o botão de dentro usa a cor
-     escolhida enquanto o resto da tela segue na cor salva. */
-  const previewStyle:
-    (React.CSSProperties & Record<'--primary', string>) | undefined = valorCor
-    ? { '--primary': valorCor }
-    : undefined;
 
   if (isLoading) {
     return (
@@ -201,7 +205,8 @@ export function BrandingForm() {
         <CardHeader>
           <CardTitle>Cor principal</CardTitle>
           <CardDescription>
-            Vale para botões, destaques e gráficos, nos dois temas.
+            Dela saem o fundo, os cartões e a barra lateral — a prévia mostra
+            como fica nos dois temas.
           </CardDescription>
         </CardHeader>
 
@@ -251,20 +256,9 @@ export function BrandingForm() {
             )}
           </div>
 
-          {/* Prévia com a cor escolhida de verdade, não com a do tema: é o
-              único jeito de saber como fica antes de salvar. */}
-          <div
-            className="bg-muted/60 flex flex-wrap items-center gap-3 rounded-xl p-4"
-            style={previewStyle}
-          >
-            <Button type="button">Botão principal</Button>
-            <span className="bg-primary/15 text-primary rounded-full px-3 py-1 text-xs font-medium">
-              Destaque
-            </span>
-            <span className="text-muted-foreground text-xs">
-              prévia · não salva nada
-            </span>
-          </div>
+          {/* Miniatura do sistema de verdade: a cor escolhida vira a paleta
+              inteira ali dentro, sem mexer no tema de quem está olhando. */}
+          <ThemePreview primaryColor={valorCor} />
         </CardContent>
       </Card>
 

@@ -129,7 +129,9 @@ export function StudentsTable({
                 </TableCell>
 
                 <TableCell>
-                  <span className="rounded-full bg-red-100 px-2 py-1 text-xs font-medium whitespace-nowrap text-red-800">
+                  {/* Plano não é alerta: o vermelho fixo competia com o
+                      status ao lado e ignorava a cor da academia. */}
+                  <span className="bg-secondary text-secondary-foreground rounded-full px-2 py-1 text-xs font-medium whitespace-nowrap">
                     {student.planName}
                   </span>
                 </TableCell>

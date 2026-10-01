@@ -1,19 +1,25 @@
+import { buildTenantPalette, paletteToCss } from '@/utils/tenantPalette';
+
 /**
- * Cor da academia aplicada por cima dos tokens do tema.
+ * A paleta da academia por cima dos tokens do tema.
  *
- * O valor vem em HSL cru ("9 60% 50%"), que é o formato que `globals.css` usa
- * — então ele entra direto como variável, sem conversão, e vale para os dois
- * temas. Em `<head>` para a cor já estar valendo no primeiro desenho, sem o
- * laranja padrão piscando antes.
+ * A cor escolhida não troca só o botão: dela saem fundo, cartão, barra
+ * lateral e bordas, de leve, com a matiz tingindo os neutros. Os valores são
+ * HSL cru porque é o formato que `globals.css` usa — entram direto.
+ *
+ * Os seletores são os mesmos do tema (`:root` e `.dark`, que é a classe do
+ * next-themes), e isto vai no fim do `<head>` para já valer no primeiro
+ * desenho, sem a cor de fábrica piscando antes.
  */
 export function TenantTheme({
   primaryColor,
 }: {
   primaryColor?: string | null;
 }) {
-  if (!primaryColor) return null;
+  const paleta = buildTenantPalette(primaryColor);
+  if (!paleta) return null;
 
-  const css = `:root,:root[data-theme="dark"],.dark{--primary:${primaryColor};--sidebar-primary:${primaryColor};--sidebar-ring:${primaryColor};--ring:${primaryColor};--chart-1:${primaryColor};}`;
+  const css = `:root{${paletteToCss(paleta.light)}}.dark{${paletteToCss(paleta.dark)}}`;
 
   return <style dangerouslySetInnerHTML={{ __html: css }} />;
 }
