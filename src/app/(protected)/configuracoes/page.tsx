@@ -1,6 +1,6 @@
 'use client';
 
-import { Palette } from 'lucide-react';
+import { Palette, Receipt, Users } from 'lucide-react';
 
 import { BreadcrumbUpdater } from '@/contexts/breadcrumb';
 import { PageIntro } from '@/components/pageIntro/pageIntro.component';
@@ -47,10 +47,21 @@ export default function ConfiguracoesPage() {
         </PageIntro>
 
         <Tabs defaultValue={abaInicial} className="w-full">
+          {/* Com ícone, as abas do sistema ficam todas iguais: as de
+              Financeiro, Cadastros e WhatsApp já vinham assim. */}
           <TabsList>
-            <TabsTrigger value="aparencia">Aparência</TabsTrigger>
-            <TabsTrigger value="equipe">Equipe</TabsTrigger>
-            <TabsTrigger value="assinatura">Assinatura</TabsTrigger>
+            <TabsTrigger value="aparencia" className="gap-2">
+              <Palette className="size-4" aria-hidden />
+              Aparência
+            </TabsTrigger>
+            <TabsTrigger value="equipe" className="gap-2">
+              <Users className="size-4" aria-hidden />
+              Equipe
+            </TabsTrigger>
+            <TabsTrigger value="assinatura" className="gap-2">
+              <Receipt className="size-4" aria-hidden />
+              Assinatura
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="aparencia" className="mt-4">
