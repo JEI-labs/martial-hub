@@ -81,9 +81,15 @@ async function colocarNoAr(hostname: string) {
     noDns && !noDns.ok ? noDns.error : null,
   ].filter(Boolean);
 
+  /* Subdomínio nosso aponta por construção: ou criamos o registro, ou existe
+     um curinga cobrindo a zona inteira — que é o arranjo de quem deixa o DNS
+     no mesmo lugar que a hospedagem. Só quando tentamos e falhamos é que ele
+     fica mesmo pendente. */
+  const nosso = Boolean(nomeNaZona(hostname));
+
   return {
     vercel: naVercel?.ok ?? false,
-    dns: noDns?.ok ?? false,
+    dns: nosso && (noDns?.ok ?? true),
     erro: erros.length ? erros.join(' · ') : null,
   };
 }
