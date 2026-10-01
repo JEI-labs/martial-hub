@@ -357,13 +357,9 @@ export const masterRouter = createTRPCRouter({
             },
             ...(hostname
               ? {
-                  domains: {
-                    create: {
-                      hostname,
-                      isPrimary: true,
-                      verifiedAt: new Date(),
-                    },
-                  },
+                  /* Sem `verifiedAt`: quem diz se o endereço está de pé é o
+                     que os provedores responderem, logo abaixo. */
+                  domains: { create: { hostname, isPrimary: true } },
                 }
               : {}),
           },
@@ -377,6 +373,13 @@ export const masterRouter = createTRPCRouter({
          a academia que já está no banco — o endereço se conserta depois, pelo
          botão de conferir. */
       const noAr = hostname ? await colocarNoAr(hostname) : null;
+
+      if (noAr?.dns) {
+        await ctx.prisma.tenantDomain.update({
+          where: { hostname: hostname! },
+          data: { verifiedAt: new Date() },
+        });
+      }
 
       return { ok: true, id: tenant.id, hostname, ...(noAr ?? {}) };
     }),
