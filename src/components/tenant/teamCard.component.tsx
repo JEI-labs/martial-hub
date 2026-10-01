@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import ConfirmDeleteDialog from '@/components/confirmDeleteDialog/confirmDeleteDialog.component';
+import { TwoFactorBadge } from '@/components/security/twoFactorBadge.component';
 import { ASSIGNABLE_ROLES, ROLE_INFO } from '@/common/constants/roles';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/trpc/react';
@@ -113,6 +114,13 @@ export function TeamCard({ currentUserId }: { currentUserId: string }) {
                       {membro.email}
                     </p>
                   </div>
+
+                  {/* Cobrar a segunda etapa da equipe só é possível sabendo
+                      quem ainda não ligou. */}
+                  <TwoFactorBadge
+                    estado={membro.doisFatores}
+                    desde={membro.doisFatoresDesde}
+                  />
 
                   <Select
                     value={membro.role}

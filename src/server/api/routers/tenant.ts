@@ -8,6 +8,7 @@ import { TRPCError } from '@trpc/server';
 import { hash } from 'argon2';
 import { z } from 'zod';
 
+import { exigeDoisFatores } from '@/server/auth/twoFactor';
 import {
   aplicarRegraDeCobranca,
   faseDaCobranca,
@@ -92,7 +93,7 @@ export const tenantRouter = createTRPCRouter({
 
   /** Quem tem acesso a esta academia. */
   listMembers: ownerProcedure.query(async ({ ctx }) => {
-    return ctx.prisma.user.findMany({
+    const membros = await ctx.prisma.user.findMany({
       where: { tenantId: ctx.tenantId },
       select: {
         id: true,
@@ -100,9 +101,24 @@ export const tenantRouter = createTRPCRouter({
         email: true,
         role: true,
         createdAt: true,
+        /* Só a data em que ligou: o segredo e os códigos de recuperação são
+           de cada um, nem o dono da academia os vê. */
+        twoFactorEnabledAt: true,
       },
       orderBy: [{ role: 'asc' }, { name: 'asc' }],
     });
+
+    /* Qual é a situação de cada um sai daqui, não da tela: a regra de quem é
+       obrigado a ter a segunda etapa é desta camada. */
+    return membros.map(({ twoFactorEnabledAt, ...membro }) => ({
+      ...membro,
+      doisFatores: twoFactorEnabledAt
+        ? ('ativo' as const)
+        : exigeDoisFatores(membro.role)
+          ? ('pendente' as const)
+          : ('opcional' as const),
+      doisFatoresDesde: twoFactorEnabledAt,
+    }));
   }),
 
   /**
