@@ -69,7 +69,7 @@ export default async function DashboardLayout({
     exigeDoisFatores(session.user.role) &&
     !(await temDoisFatores(session.user.id))
   ) {
-    return <TwoFactorRequired nome={session.user.name} />;
+    return <TwoFactorRequired nome={session.user.name} destino="/painel" />;
   }
 
   return (

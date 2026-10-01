@@ -1,6 +1,7 @@
 import { ShieldAlert } from 'lucide-react';
 
 import { TwoFactorCard } from '@/components/security/twoFactorCard.component';
+import { TwoFactorExit } from '@/components/security/twoFactorExit.component';
 
 /**
  * A parede: quem é obrigado a ter verificação em duas etapas e ainda não
@@ -10,7 +11,14 @@ import { TwoFactorCard } from '@/components/security/twoFactorCard.component';
  * pessoa está — e porque bloquear no lugar onde ela já está, com a
  * configuração logo abaixo, é mais curto do que mandá-la para outro endereço.
  */
-export function TwoFactorRequired({ nome }: { nome: string }) {
+export function TwoFactorRequired({
+  nome,
+  destino,
+}: {
+  nome: string;
+  /** Onde cai quem termina a configuração: o painel, ou o menu do master. */
+  destino: string;
+}) {
   return (
     <div className="bg-background flex min-h-screen w-full justify-center p-6">
       <div className="flex w-full max-w-2xl flex-col gap-6 py-10">
@@ -32,6 +40,10 @@ export function TwoFactorRequired({ nome }: { nome: string }) {
         </div>
 
         <TwoFactorCard />
+
+        <div className="flex justify-end">
+          <TwoFactorExit destino={destino} />
+        </div>
       </div>
     </div>
   );
