@@ -147,6 +147,23 @@ export const protectedProcedure = t.procedure
   });
 
 /**
+ * Procedure de quem manda na academia. Recepção e professor usam o sistema,
+ * mas não mexem na marca nem em quem tem acesso.
+ */
+export const ownerProcedure = protectedProcedure.use(({ ctx, next }) => {
+  const { role } = ctx.session.user;
+
+  if (role !== 'OWNER' && role !== 'MASTER') {
+    throw new TRPCError({
+      code: 'FORBIDDEN',
+      message: 'Só o dono da academia pode alterar isto.',
+    });
+  }
+
+  return next({ ctx });
+});
+
+/**
  * Procedure do dono do sistema: enxerga todas as academias e não pertence a
  * nenhuma. É o que sustenta o menu master.
  */

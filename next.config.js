@@ -7,6 +7,14 @@ import './src/env.js';
 /** @type {import("next").NextConfig} */
 const config = {
   /**
+   * Multi-tenant em desenvolvimento acontece em subdomínio
+   * (academia.lvh.me:3000, que resolve para 127.0.0.1 sem mexer em DNS). Sem
+   * liberar essas origens, o Next 16 recusa as requisições do próprio app e a
+   * tela fica em esqueleto para sempre.
+   */
+  allowedDevOrigins: ['*.lvh.me', '*.localhost', '*.local'],
+
+  /**
    * As rotas passaram para português. Isto mantém de pé o que já estava
    * aberto, favoritado ou compartilhado — temporário, não permanente, porque
    * um 308 fica gravado no navegador e atrapalharia se mudarmos de ideia.
