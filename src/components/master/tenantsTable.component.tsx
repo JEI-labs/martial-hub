@@ -143,8 +143,11 @@ export function TenantsTable() {
 
                     <TableCell className="text-muted-foreground text-xs">
                       {principal ? (
-                        <span className="flex items-center gap-2">
-                          {principal.hostname}
+                        /* O botão encostado na borda da coluna, e não no fim
+                           do endereço: assim os ícones ficam na mesma vertical
+                           em vez de dançarem conforme o tamanho de cada um. */
+                        <span className="flex items-center justify-between gap-2">
+                          <span className="truncate">{principal.hostname}</span>
                           {/* O endereço existe para ser mandado ao cliente:
                               copiá-lo é a ação seguinte a olhá-lo. */}
                           <CopyButton
@@ -152,7 +155,7 @@ export function TenantsTable() {
                             label=""
                             variant="ghost"
                             size="icon"
-                            className="[&>svg]:mr-0"
+                            className="size-7 shrink-0"
                             aria-label={`Copiar link de ${tenant.name}`}
                           />
                         </span>

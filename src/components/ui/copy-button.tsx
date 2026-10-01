@@ -26,6 +26,10 @@ export function CopyButton({
   label?: string;
 } & Omit<ButtonProps, 'onClick' | 'value'>) {
   const [copiado, setCopiado] = useState(false);
+  /* Sem rótulo, o botão é só o ícone — e o aviso de cópia tem de ser só o
+     ícone também. Escrever "Copiado" ali dentro estourava a largura e passava
+     por cima do que estava ao lado. */
+  const soIcone = label === '';
 
   useEffect(() => {
     if (!copiado) return;
@@ -63,11 +67,14 @@ export function CopyButton({
       {...props}
     >
       {copiado ? (
-        <Check className="mr-2 size-4 text-green-600" aria-hidden />
+        <Check
+          className={cn('size-4 text-green-600', !soIcone && 'mr-2')}
+          aria-hidden
+        />
       ) : (
-        <Copy className="mr-2 size-4" aria-hidden />
+        <Copy className={cn('size-4', !soIcone && 'mr-2')} aria-hidden />
       )}
-      {copiado ? 'Copiado' : label}
+      {!soIcone && (copiado ? 'Copiado' : label)}
     </Button>
   );
 }
