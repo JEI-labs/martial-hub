@@ -35,7 +35,17 @@ export function normalizeHost(host: string | null | undefined): string | null {
  * nele se parece com o endereço de um cliente.
  */
 export function masterHost(): string | null {
-  if (env.MASTER_HOST) return normalizeHost(env.MASTER_HOST);
+  if (env.MASTER_HOST) {
+    /* Quem preenche isto é gente, e gente cola endereço inteiro. Sem tirar o
+       esquema antes, o corte da porta transformaria `https://casa.com` em
+       `https` e o master seria mandado para um host que não existe. */
+    const semEsquema = env.MASTER_HOST.trim().replace(
+      /^[a-z][a-z0-9+.-]*:\/\//i,
+      '',
+    );
+    return normalizeHost(semEsquema.split('/')[0]);
+  }
+
   return env.ROOT_DOMAIN ? `app.${env.ROOT_DOMAIN.toLowerCase()}` : null;
 }
 

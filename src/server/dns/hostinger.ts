@@ -12,9 +12,17 @@ import { env } from '@/env';
 
 const API = 'https://developers.hostinger.com/api/dns/v1';
 
-/** Para onde o subdomínio aponta. A Vercel dá um alvo por projeto; sem ele,
- *  o genérico atende. */
-const ALVO = env.DNS_CNAME_TARGET ?? 'cname.vercel-dns.com';
+/**
+ * Para onde o subdomínio aponta. A Vercel dá um alvo por projeto; sem ele, o
+ * genérico atende.
+ *
+ * O ponto final é nosso de colocar — e a Vercel mostra o alvo ora com ele,
+ * ora sem. Dois pontos no fim é um registro inválido, então tira-se o que
+ * vier antes de acrescentar.
+ */
+const ALVO = (env.DNS_CNAME_TARGET ?? 'cname.vercel-dns.com')
+  .trim()
+  .replace(/\.+$/, '');
 
 export function dnsEnabled(): boolean {
   return Boolean(env.HOSTINGER_API_TOKEN && env.ROOT_DOMAIN);
