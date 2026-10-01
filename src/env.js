@@ -46,6 +46,18 @@ export const env = createEnv({
      */
     MASTER_HOST: z.string().optional(),
     /**
+     * Token da Hostinger, onde mora a zona do domínio raiz. Com ele, o
+     * subdomínio da academia nova já nasce apontando para o servidor; sem ele,
+     * alguém precisa criar o CNAME na mão.
+     */
+    HOSTINGER_API_TOKEN: z.string().optional(),
+    /**
+     * Para onde o CNAME aponta. A Vercel dá um alvo por projeto (algo como
+     * `abc123.vercel-dns-016.com`) e é ele que deve vir aqui; o genérico
+     * `cname.vercel-dns.com` é só o padrão.
+     */
+    DNS_CNAME_TARGET: z.string().optional(),
+    /**
      * Credenciais da Vercel para cadastrar o domínio próprio do cliente
      * sozinho. Sem elas, a tela do master só guarda o domínio e diz que falta
      * cadastrar na mão.
@@ -80,6 +92,8 @@ export const env = createEnv({
     CRON_SECRET: process.env.CRON_SECRET,
     ROOT_DOMAIN: process.env.ROOT_DOMAIN,
     MASTER_HOST: process.env.MASTER_HOST,
+    HOSTINGER_API_TOKEN: process.env.HOSTINGER_API_TOKEN,
+    DNS_CNAME_TARGET: process.env.DNS_CNAME_TARGET,
     VERCEL_TOKEN: process.env.VERCEL_TOKEN,
     VERCEL_PROJECT_ID: process.env.VERCEL_PROJECT_ID,
     VERCEL_TEAM_ID: process.env.VERCEL_TEAM_ID,

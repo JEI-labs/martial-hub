@@ -60,11 +60,16 @@ export function NewTenantDialog({
 
   const criar = api.master.createTenant.useMutation({
     onSuccess: (resultado) => {
+      /* O endereço depende de dois provedores: dizer "já responde" sem saber
+         se eles atenderam é o tipo de mentira que vira telefonema. */
       toast({
         title: 'Academia criada',
-        description: resultado.hostname
-          ? `Já responde em ${resultado.hostname}.`
-          : 'Cadastre um domínio para ela ser acessada.',
+        description: !resultado.hostname
+          ? 'Cadastre um domínio para ela ser acessada.'
+          : resultado.erro
+            ? `O endereço ${resultado.hostname} ficou pendente: ${resultado.erro}`
+            : `Já responde em ${resultado.hostname}. O DNS leva alguns minutos para espalhar.`,
+        variant: resultado.erro ? 'destructive' : undefined,
       });
       setName('');
       setSlug('');

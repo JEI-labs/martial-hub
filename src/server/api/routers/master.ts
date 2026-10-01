@@ -17,6 +17,12 @@ import {
   removeDomain,
   vercelEnabled,
 } from '@/server/vercel/domains';
+import {
+  apontarSubdominio,
+  dnsEnabled,
+  nomeNaZona,
+  removerSubdominio,
+} from '@/server/dns/hostinger';
 import { exigeDoisFatores } from '@/server/auth/twoFactor';
 import { criarBilheteDeSuporte } from '@/server/support/handoff';
 import {
@@ -54,6 +60,33 @@ const ASSINATURAS_ATIVAS: Prisma.TenantSubscriptionWhereInput = {
   canceledAt: null,
   tenant: { status: { in: [ETenantStatus.ACTIVE, ETenantStatus.TRIAL] } },
 };
+
+/**
+ * Põe um endereço no ar.
+ *
+ * São dois lados, e nenhum sozinho funciona: o domínio precisa estar no
+ * projeto da Vercel (senão o roteamento nem chega até nós) e o DNS precisa
+ * apontar para lá (senão o certificado não sai). O DNS só é nosso de criar
+ * quando o endereço mora no nosso domínio raiz — a zona do cliente é dele.
+ */
+async function colocarNoAr(hostname: string) {
+  const naVercel = vercelEnabled() ? await addDomain(hostname) : null;
+  const noDns =
+    dnsEnabled() && nomeNaZona(hostname)
+      ? await apontarSubdominio(hostname)
+      : null;
+
+  const erros = [
+    naVercel && !naVercel.ok ? naVercel.error : null,
+    noDns && !noDns.ok ? noDns.error : null,
+  ].filter(Boolean);
+
+  return {
+    vercel: naVercel?.ok ?? false,
+    dns: noDns?.ok ?? false,
+    erro: erros.length ? erros.join(' · ') : null,
+  };
+}
 
 export const masterRouter = createTRPCRouter({
   /** Os números do negócio: receita recorrente, clientes e inadimplência. */
@@ -340,7 +373,12 @@ export const masterRouter = createTRPCRouter({
         return criado;
       });
 
-      return { ok: true, id: tenant.id, hostname };
+      /* Fora da transação de propósito: provedor fora do ar não pode desfazer
+         a academia que já está no banco — o endereço se conserta depois, pelo
+         botão de conferir. */
+      const noAr = hostname ? await colocarNoAr(hostname) : null;
+
+      return { ok: true, id: tenant.id, hostname, ...(noAr ?? {}) };
     }),
 
   updateTenant: masterProcedure
@@ -392,17 +430,19 @@ export const masterRouter = createTRPCRouter({
         });
       }
 
-      const naVercel = vercelEnabled() ? await addDomain(input.hostname) : null;
+      const noAr = await colocarNoAr(input.hostname);
 
       await ctx.prisma.tenantDomain.create({
-        data: { hostname: input.hostname, tenantId: input.tenantId },
+        data: {
+          hostname: input.hostname,
+          tenantId: input.tenantId,
+          /* Subdomínio nosso já nasce conferido: fomos nós que criamos o DNS.
+             Domínio do cliente espera a Vercel confirmar. */
+          verifiedAt: noAr.dns ? new Date() : null,
+        },
       });
 
-      return {
-        ok: true,
-        vercel: naVercel?.ok ?? false,
-        erro: naVercel && !naVercel.ok ? naVercel.error : null,
-      };
+      return { ok: true, ...noAr };
     }),
 
   /** Pergunta à Vercel em que pé está o DNS do cliente. */
@@ -454,6 +494,10 @@ export const masterRouter = createTRPCRouter({
       }
 
       if (vercelEnabled()) await removeDomain(dominio.hostname);
+      if (dnsEnabled() && nomeNaZona(dominio.hostname)) {
+        await removerSubdominio(dominio.hostname);
+      }
+
       await ctx.prisma.tenantDomain.delete({ where: { id: input.id } });
 
       return { ok: true };
