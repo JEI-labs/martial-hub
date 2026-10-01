@@ -1,16 +1,11 @@
 import { EUserRole } from '@prisma/client';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { Building2, FileText, LayoutDashboard, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 
 import { getServerAuthSession } from '@/server/auth';
 import { ThemeToggler } from '@/components/theme/theme-toggler';
-
-const menu = [
-  { href: '/master', label: 'Painel', icon: LayoutDashboard },
-  { href: '/master/clientes', label: 'Clientes', icon: Building2 },
-  { href: '/master/faturas', label: 'Faturas', icon: FileText },
-];
+import { MasterNav } from '@/components/master/masterNav.component';
 
 /**
  * A casa do dono do sistema. Fora da área das academias de propósito: aqui
@@ -31,18 +26,7 @@ export default async function MasterLayout({
           <div className="flex items-center gap-6">
             <span className="font-semibold">Thai-Boxe Manager</span>
 
-            <nav className="flex items-center gap-1">
-              {menu.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="text-muted-foreground hover:bg-muted hover:text-foreground flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors"
-                >
-                  <item.icon className="size-4" />
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
+            <MasterNav />
           </div>
 
           <div className="flex items-center gap-2">
