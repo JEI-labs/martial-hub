@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import Image from 'next/image';
-import { ImageUp, Loader2, Trash2 } from 'lucide-react';
+import { ImageIcon, ImageUp, Loader2, Trash2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -180,6 +180,7 @@ export function BrandingForm() {
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <CampoDeImagem
             titulo="Logo"
+            vazio="Sua logo"
             ajuda="Aparece no topo da barra lateral e acima do formulário de login. Fundo transparente fica melhor."
             url={valorLogo}
             enviando={enviando === 'logoUrl'}
@@ -191,6 +192,7 @@ export function BrandingForm() {
 
           <CampoDeImagem
             titulo="Imagem do login"
+            vazio="Sua imagem de login aqui"
             ajuda="Ocupa a metade esquerda da tela de entrada. Horizontal, de preferência a partir de 1600px."
             url={valorLogin}
             enviando={enviando === 'loginImageUrl'}
@@ -285,6 +287,7 @@ export function BrandingForm() {
 function CampoDeImagem({
   titulo,
   ajuda,
+  vazio,
   url,
   enviando,
   onPick,
@@ -294,6 +297,8 @@ function CampoDeImagem({
 }: {
   titulo: string;
   ajuda: string;
+  /** O que o lugar mostra enquanto está vazio — o mesmo texto do sistema. */
+  vazio: string;
   url: string | null;
   enviando: boolean;
   onPick: (_arquivo: File) => void;
@@ -328,7 +333,10 @@ function CampoDeImagem({
             )}
           />
         ) : (
-          <span className="text-muted-foreground text-xs">sem imagem</span>
+          <span className="text-muted-foreground flex items-center gap-2 text-xs">
+            <ImageIcon className="size-4" aria-hidden />
+            {vazio}
+          </span>
         )}
       </div>
 

@@ -18,6 +18,7 @@ import type { EUserRole } from '@prisma/client';
 import Image from 'next/image';
 
 import { ROLE_SECTIONS } from '@/common/constants/roles';
+import { LogoPlaceholder } from '@/components/brand/brandPlaceholders.component';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 
@@ -51,7 +52,9 @@ interface AppSidebarProps {
 
 export function AppSidebar({ logoUrl, tenantName, role }: AppSidebarProps) {
   const path = usePathname();
-  const logo = logoUrl ?? '/images/logo.png';
+  /* Fora de uma academia (área do master) vale a marca do sistema; dentro de
+     uma que ainda não enviou a dela, o lugar fica reservado. */
+  const logo = tenantName ? logoUrl : '/images/logo.png';
 
   /* Menu que leva a uma tela proibida é só frustração: o professor não vê
      Financeiro, a recepção não vê Cadastros. O servidor recusa de qualquer
@@ -66,16 +69,20 @@ export function AppSidebar({ logoUrl, tenantName, role }: AppSidebarProps) {
       <SidebarHeader>
         {/* o nome vai no alt: some da tela, mas segue no leitor de tela */}
         <div className="flex h-28 w-full items-center px-4">
-          <Image
-            src={logo}
-            alt={tenantName ?? 'Team Sartorato'}
-            width={300}
-            height={300}
-            /* logo do cliente mora no Blob, fora do projeto: o otimizador do
-               Next não conhece esse host */
-            unoptimized={logo.startsWith('http')}
-            className="h-20 w-auto object-contain"
-          />
+          {logo ? (
+            <Image
+              src={logo}
+              alt={tenantName ?? 'Team Sartorato'}
+              width={300}
+              height={300}
+              /* logo do cliente mora no Blob, fora do projeto: o otimizador do
+                 Next não conhece esse host */
+              unoptimized={logo.startsWith('http')}
+              className="h-20 w-auto object-contain"
+            />
+          ) : (
+            <LogoPlaceholder className="h-14 w-full" />
+          )}
         </div>
       </SidebarHeader>
 
