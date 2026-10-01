@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { signOut, useSession } from 'next-auth/react';
-import { LogOut, UserPen, Palette } from 'lucide-react';
+import { LogOut, UserPen, Settings } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/trpc/react';
 
@@ -49,8 +49,8 @@ export function UserProfileContainer(): React.JSX.Element {
         </Link>
         <Link href="/configuracoes">
           <DropdownMenuItem className="cursor-pointer gap-2 py-2 pr-4 pl-3">
-            <Palette className="h-4 w-4" />
-            Aparência do sistema
+            <Settings className="h-4 w-4" />
+            Configurações
           </DropdownMenuItem>
         </Link>
         {/* <Link href="/seguranca">
