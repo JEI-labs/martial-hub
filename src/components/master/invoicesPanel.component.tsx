@@ -38,6 +38,9 @@ export function InvoicesPanel({ tenantId }: { tenantId?: string }) {
   const { toast } = useToast();
   const utils = api.useUtils();
   const [mes, setMes] = useState(mesAtual);
+  /* Qual linha está salvando, e não "alguma está": com um isPending só, marcar
+     uma fatura desabilitava o botão de todas as outras. */
+  const [pagando, setPagando] = useState<string | null>(null);
 
   const { data, isLoading } = api.master.listInvoices.useQuery({ tenantId });
 
@@ -188,15 +191,20 @@ export function InvoicesPanel({ tenantId }: { tenantId?: string }) {
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled={mudarStatus.isPending}
-                        onClick={() =>
+                        disabled={pagando === fatura.id}
+                        onClick={() => {
+                          setPagando(fatura.id);
                           mudarStatus.mutate({
                             id: fatura.id,
                             status: ETenantInvoiceStatus.PAID,
-                          })
-                        }
+                          });
+                        }}
                       >
-                        <Check className="mr-2 size-4" />
+                        {pagando === fatura.id ? (
+                          <Loader2 className="mr-2 size-4 animate-spin" />
+                        ) : (
+                          <Check className="mr-2 size-4" />
+                        )}
                         Marcar paga
                       </Button>
                     )}

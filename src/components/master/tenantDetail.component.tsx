@@ -51,6 +51,9 @@ export function TenantDetail({ tenantId }: { tenantId: string }) {
   const [novoDominio, setNovoDominio] = useState('');
   const [preco, setPreco] = useState<string | null>(null);
   const [dia, setDia] = useState<string | null>(null);
+  /* Qual domínio está sendo conferido: com um isPending só, apertar Conferir
+     num travava o botão de todos os outros. */
+  const [conferindo, setConferindo] = useState<string | null>(null);
 
   const invalidar = () => {
     utils.master.getTenant.invalidate({ id: tenantId });
@@ -84,6 +87,7 @@ export function TenantDetail({ tenantId }: { tenantId: string }) {
   });
 
   const conferir = api.master.checkDomain.useMutation({
+    onSettled: () => setConferindo(null),
     onSuccess: (estado) => {
       toast({
         title: estado.dnsOk ? 'DNS apontando certo' : 'Ainda não aponta',
@@ -246,8 +250,11 @@ export function TenantDetail({ tenantId }: { tenantId: string }) {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={conferir.isPending}
-                onClick={() => conferir.mutate({ id: dominio.id })}
+                disabled={conferindo === dominio.id}
+                onClick={() => {
+                  setConferindo(dominio.id);
+                  conferir.mutate({ id: dominio.id });
+                }}
               >
                 <RefreshCw className="mr-2 size-4" />
                 Conferir

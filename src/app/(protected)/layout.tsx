@@ -11,6 +11,7 @@ import { getServerAuthSession } from '@/server/auth';
 import { getCurrentTenant } from '@/server/tenant/resolve';
 import { TenantBlocked } from '@/components/layout/tenantBlocked.component';
 import { SupportBanner } from '@/components/layout/supportBanner.component';
+import { BillingBanner } from '@/components/tenant/billingBanner.component';
 
 export default async function DashboardLayout({
   children,
@@ -62,6 +63,10 @@ export default async function DashboardLayout({
         {/* Dentro da coluna de conteúdo: ao lado da sidebar, no flex do
             provider, a tarja virava uma irmã dela e caía no meio da tela. */}
         {emSuporte && tenant && <SupportBanner tenantName={tenant.name} />}
+
+        {/* Cobrança do sistema é assunto de quem assinou: recepção e professor
+            não decidem pagar e não precisam ver. */}
+        {session.user.role === EUserRole.OWNER && <BillingBanner />}
 
         <div className="min-h-[calc(100vh-2rem)]">
           <div className="bg-card shadow-card flex items-center justify-between px-4 py-3 md:mt-6 md:rounded-2xl md:px-6">

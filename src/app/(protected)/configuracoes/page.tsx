@@ -6,8 +6,10 @@ import { BreadcrumbUpdater } from '@/contexts/breadcrumb';
 import { PageIntro } from '@/components/pageIntro/pageIntro.component';
 import { BrandingForm } from '@/components/tenant/brandingForm.component';
 import { TeamCard } from '@/components/tenant/teamCard.component';
+import { BillingCard } from '@/components/tenant/billingCard.component';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useSession } from 'next-auth/react';
+import { useSearchParams } from 'next/navigation';
 
 const breadcrumbItems = [
   { label: 'Home', href: '/painel' },
@@ -16,6 +18,8 @@ const breadcrumbItems = [
 
 export default function ConfiguracoesPage() {
   const { data: session } = useSession();
+  /* A tarja de cobrança aponta para cá com ?aba=assinatura. */
+  const abaInicial = useSearchParams().get('aba') ?? 'aparencia';
 
   return (
     <div className="w-full">
@@ -42,10 +46,11 @@ export default function ConfiguracoesPage() {
           endereço vê essa marca já na tela de login, antes de digitar a senha.
         </PageIntro>
 
-        <Tabs defaultValue="aparencia" className="w-full">
+        <Tabs defaultValue={abaInicial} className="w-full">
           <TabsList>
             <TabsTrigger value="aparencia">Aparência</TabsTrigger>
             <TabsTrigger value="equipe">Equipe</TabsTrigger>
+            <TabsTrigger value="assinatura">Assinatura</TabsTrigger>
           </TabsList>
 
           <TabsContent value="aparencia" className="mt-4">
@@ -54,6 +59,10 @@ export default function ConfiguracoesPage() {
 
           <TabsContent value="equipe" className="mt-4">
             <TeamCard currentUserId={session?.user.id ?? ''} />
+          </TabsContent>
+
+          <TabsContent value="assinatura" className="mt-4">
+            <BillingCard />
           </TabsContent>
         </Tabs>
       </main>

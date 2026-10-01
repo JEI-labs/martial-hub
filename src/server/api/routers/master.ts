@@ -18,6 +18,7 @@ import {
   vercelEnabled,
 } from '@/server/vercel/domains';
 import { criarBilheteDeSuporte } from '@/server/support/handoff';
+import { DIAS_DE_AVISO, marcarVencidas } from '@/server/billing/invoices';
 
 const CENTS = 100;
 
@@ -52,20 +53,40 @@ const ASSINATURAS_ATIVAS: Prisma.TenantSubscriptionWhereInput = {
 export const masterRouter = createTRPCRouter({
   /** Os números do negócio: receita recorrente, clientes e inadimplência. */
   overview: masterProcedure.query(async ({ ctx }) => {
-    const [tenants, assinaturas, faturas, alunos] = await Promise.all([
-      ctx.prisma.tenant.groupBy({ by: ['status'], _count: true }),
-      ctx.prisma.tenantSubscription.aggregate({
-        where: ASSINATURAS_ATIVAS,
-        _sum: { priceCents: true },
-        _count: true,
-      }),
-      ctx.prisma.tenantInvoice.groupBy({
-        by: ['status'],
-        _count: true,
-        _sum: { amountCents: true },
-      }),
-      ctx.prisma.student.count(),
-    ]);
+    await marcarVencidas();
+
+    const limite = new Date();
+    limite.setDate(limite.getDate() + DIAS_DE_AVISO);
+
+    const [tenants, assinaturas, faturas, alunos, vencendo] = await Promise.all(
+      [
+        ctx.prisma.tenant.groupBy({ by: ['status'], _count: true }),
+        ctx.prisma.tenantSubscription.aggregate({
+          where: ASSINATURAS_ATIVAS,
+          _sum: { priceCents: true },
+          _count: true,
+        }),
+        ctx.prisma.tenantInvoice.groupBy({
+          by: ['status'],
+          _count: true,
+          _sum: { amountCents: true },
+        }),
+        ctx.prisma.student.count(),
+        ctx.prisma.tenantInvoice.findMany({
+          where: {
+            status: ETenantInvoiceStatus.OPEN,
+            dueDate: { lte: limite },
+          },
+          select: {
+            id: true,
+            amountCents: true,
+            dueDate: true,
+            tenant: { select: { id: true, name: true } },
+          },
+          orderBy: { dueDate: 'asc' },
+        }),
+      ],
+    );
 
     const porStatus = Object.fromEntries(
       tenants.map((linha) => [linha.status, linha._count]),
@@ -102,6 +123,19 @@ export const masterRouter = createTRPCRouter({
         pagas: porFatura.PAID ?? { quantidade: 0, valor: 0 },
       },
       alunosNoSistema: alunos,
+      vencendo: {
+        quantidade: vencendo.length,
+        valor: vencendo.reduce((total, f) => total + f.amountCents, 0) / CENTS,
+        /* Quem são, não só quantas: a pergunta seguinte a "3 vencem esta
+           semana" é sempre "de quem?". */
+        lista: vencendo.slice(0, 6).map((fatura) => ({
+          id: fatura.id,
+          tenantId: fatura.tenant.id,
+          tenant: fatura.tenant.name,
+          valor: fatura.amountCents / CENTS,
+          dueDate: fatura.dueDate,
+        })),
+      },
     };
   }),
 
@@ -410,6 +444,8 @@ export const masterRouter = createTRPCRouter({
         .default({}),
     )
     .query(async ({ ctx, input }) => {
+      await marcarVencidas();
+
       return ctx.prisma.tenantInvoice.findMany({
         where: {
           ...(input.status ? { status: input.status } : {}),

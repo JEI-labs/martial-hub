@@ -8,6 +8,13 @@ import { TRPCError } from '@trpc/server';
 import { hash } from 'argon2';
 import { z } from 'zod';
 
+import {
+  DIAS_DE_AVISO,
+  diasAte,
+  marcarVencidas,
+} from '@/server/billing/invoices';
+import { ETenantInvoiceStatus } from '@prisma/client';
+
 /** HSL cru, que é o formato das variáveis do tema: "9 60% 50%". */
 const hslTriple = z
   .string()
@@ -221,4 +228,70 @@ export const tenantRouter = createTRPCRouter({
       await ctx.prisma.user.delete({ where: { id: input.id } });
       return { ok: true };
     }),
+
+  /**
+   * A assinatura da academia com o dono do sistema: o que ela paga, o que
+   * está em aberto e o que vence logo.
+   *
+   * Fica do lado do cliente de propósito. Cobrança que só existe no painel de
+   * quem cobra vira surpresa de corte de acesso — e quem paga tem direito de
+   * ver a própria conta.
+   */
+  getBilling: protectedProcedure.query(async ({ ctx }) => {
+    await marcarVencidas();
+
+    const [assinatura, faturas] = await Promise.all([
+      ctx.prisma.tenantSubscription.findUnique({
+        where: { tenantId: ctx.tenantId },
+        select: { priceCents: true, billingDay: true, canceledAt: true },
+      }),
+      ctx.prisma.tenantInvoice.findMany({
+        where: {
+          tenantId: ctx.tenantId,
+          status: { not: ETenantInvoiceStatus.CANCELED },
+        },
+        select: {
+          id: true,
+          amountCents: true,
+          dueDate: true,
+          paidAt: true,
+          status: true,
+        },
+        orderBy: { dueDate: 'desc' },
+        take: 12,
+      }),
+    ]);
+
+    const emAberto = faturas.filter(
+      (fatura) =>
+        fatura.status === ETenantInvoiceStatus.OPEN ||
+        fatura.status === ETenantInvoiceStatus.OVERDUE,
+    );
+
+    /* A mais urgente manda no aviso: a que já venceu há mais tempo, ou, se
+       estiver tudo em dia, a próxima a vencer. */
+    const maisUrgente = [...emAberto].sort(
+      (a, b) => a.dueDate.getTime() - b.dueDate.getTime(),
+    )[0];
+
+    const dias = maisUrgente ? diasAte(maisUrgente.dueDate) : null;
+
+    return {
+      assinatura,
+      faturas,
+      aberto: {
+        quantidade: emAberto.length,
+        valor: emAberto.reduce((total, f) => total + f.amountCents, 0) / 100,
+      },
+      aviso:
+        maisUrgente && dias !== null && dias <= DIAS_DE_AVISO
+          ? {
+              diasRestantes: dias,
+              valor: maisUrgente.amountCents / 100,
+              dueDate: maisUrgente.dueDate,
+              atrasada: dias < 0,
+            }
+          : null,
+    };
+  }),
 });

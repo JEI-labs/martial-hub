@@ -42,6 +42,8 @@ export function TeamCard({ currentUserId }: { currentUserId: string }) {
   const { data: membros, isLoading } = api.tenant.listMembers.useQuery();
   const [novoAberto, setNovoAberto] = useState(false);
   const [removerId, setRemoverId] = useState<string | null>(null);
+  /* Qual pessoa está salvando: um isPending só travava o select de todas. */
+  const [salvando, setSalvando] = useState<string | null>(null);
 
   const invalidar = () => utils.tenant.listMembers.invalidate();
   const erro = (titulo: string) => (error: { message: string }) =>
@@ -52,8 +54,14 @@ export function TeamCard({ currentUserId }: { currentUserId: string }) {
     });
 
   const trocarPapel = api.tenant.updateMemberRole.useMutation({
-    onSuccess: invalidar,
-    onError: erro('Não deu para trocar o acesso'),
+    onSuccess: () => {
+      setSalvando(null);
+      invalidar();
+    },
+    onError: (error) => {
+      setSalvando(null);
+      erro('Não deu para trocar o acesso')(error);
+    },
   });
 
   const remover = api.tenant.removeMember.useMutation({
@@ -108,13 +116,14 @@ export function TeamCard({ currentUserId }: { currentUserId: string }) {
 
                   <Select
                     value={membro.role}
-                    disabled={souEu || trocarPapel.isPending}
-                    onValueChange={(value) =>
+                    disabled={souEu || salvando === membro.id}
+                    onValueChange={(value) => {
+                      setSalvando(membro.id);
                       trocarPapel.mutate({
                         id: membro.id,
                         role: value as EUserRole,
-                      })
-                    }
+                      });
+                    }}
                   >
                     <SelectTrigger className="w-44">
                       <SelectValue />
