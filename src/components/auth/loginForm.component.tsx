@@ -15,11 +15,12 @@ import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useState } from 'react';
 import { z } from 'zod';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { getSession, signIn } from 'next-auth/react';
 import { Form } from '@/components/ui/form';
 import { FormInputComponent } from '@/components/forms/formInput/formInput.component';
+import { useResetOnChange } from '@/hooks/useResetOnChange/useResetOnChange.hook';
 
 interface LoginFormProps {
   /** Vem da página, que é quem sabe de qual academia é o endereço. */
@@ -61,11 +62,25 @@ export function LoginForm({
     },
   });
 
+  /* Trocar de conta volta para o começo: sem isto, quem errou de login numa
+     conta com segunda etapa continuava vendo o campo de código ao digitar
+     outro e-mail — e parecia que o sistema pedia 2FA de quem não tem. */
+  /* useWatch e não form.watch: o watch devolve função nova a cada render e o
+     React Compiler desiste de memoizar o componente inteiro por causa dele. */
+  const emailDigitado = useWatch({ control: form.control, name: 'username' });
+  useResetOnChange([emailDigitado], () => {
+    setPedindoCodigo(false);
+    setCodigo('');
+    setErrorMessage('');
+  });
+
   async function onSubmit(data: z.infer<typeof formSchema>) {
     setDisabled(true);
     const result = await signIn('credentials', {
       ...data,
-      totp: codigo,
+      /* Só manda o campo quando há algo nele: conta sem segunda etapa não
+         precisa saber que ele existe. */
+      ...(codigo.trim() ? { totp: codigo.trim() } : {}),
       redirect: false,
     });
 
@@ -164,9 +179,25 @@ export function LoginForm({
                     className="border-input bg-background focus-visible:ring-ring h-14 w-full rounded-full border px-4 text-center text-lg tracking-[0.3em] focus-visible:ring-2 focus-visible:outline-none"
                   />
                   <p className="text-muted-foreground text-xs">
-                    Seis dígitos do seu autenticador. Perdeu o celular? Use um
-                    código de recuperação.
+                    Seis dígitos do autenticador de{' '}
+                    <strong className="text-foreground font-medium">
+                      {emailDigitado}
+                    </strong>
+                    . Perdeu o celular? Use um código de recuperação.
                   </p>
+
+                  <button
+                    type="button"
+                    className="text-primary text-xs hover:underline"
+                    onClick={() => {
+                      setPedindoCodigo(false);
+                      setCodigo('');
+                      setErrorMessage('');
+                      form.setValue('password', '');
+                    }}
+                  >
+                    Entrar com outra conta
+                  </button>
                 </div>
               )}
 

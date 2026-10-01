@@ -1,7 +1,5 @@
 import { EUserRole } from '@prisma/client';
 import { redirect } from 'next/navigation';
-import Link from 'next/link';
-import { LogOut } from 'lucide-react';
 
 import { env } from '@/env';
 import { getServerAuthSession } from '@/server/auth';
@@ -10,6 +8,7 @@ import { exigeDoisFatores, temDoisFatores } from '@/server/auth/twoFactor';
 import { TwoFactorRequired } from '@/components/security/twoFactorRequired.component';
 import { ThemeToggler } from '@/components/theme/theme-toggler';
 import { MasterNav } from '@/components/master/masterNav.component';
+import { MasterUserMenu } from '@/components/master/masterUserMenu.component';
 
 /**
  * A casa do dono do sistema. Fora da área das academias de propósito: aqui
@@ -56,13 +55,7 @@ export default async function MasterLayout({
 
           <div className="flex items-center gap-2">
             <ThemeToggler />
-            <Link
-              href="/api/auth/signout"
-              className="text-muted-foreground hover:text-foreground flex items-center gap-2 text-sm"
-            >
-              <LogOut className="size-4" />
-              Sair
-            </Link>
+            <MasterUserMenu nome={session.user.name} />
           </div>
         </div>
       </header>
