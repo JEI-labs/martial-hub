@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Eye,
   EyeOff,
+  KeyRound,
   LoaderCircle,
   Mail,
 } from 'lucide-react';
@@ -12,6 +13,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useState } from 'react';
 import { z } from 'zod';
@@ -164,20 +166,33 @@ export function LoginForm({
                 <div className="space-y-2">
                   <label
                     htmlFor="codigo"
-                    className="text-foreground text-sm font-medium"
+                    className="text-foreground text-sm leading-none font-medium"
                   >
                     Código do aplicativo
                   </label>
-                  <input
-                    id="codigo"
-                    inputMode="numeric"
-                    maxLength={10}
-                    autoFocus
-                    placeholder="000000"
-                    value={codigo}
-                    onChange={(event) => setCodigo(event.target.value)}
-                    className="border-input bg-background focus-visible:ring-ring h-14 w-full rounded-full border px-4 text-center text-lg tracking-[0.3em] focus-visible:ring-2 focus-visible:outline-none"
-                  />
+
+                  {/* Mesmo campo dos outros dois — altura, raio e sombra. A
+                      versão anterior era um input cru e crescia no meio do
+                      formulário. */}
+                  <div className="relative">
+                    <KeyRound
+                      size={18}
+                      className="text-muted-foreground pointer-events-none absolute top-4 left-4 flex items-center"
+                    />
+                    <Input
+                      id="codigo"
+                      inputMode="numeric"
+                      maxLength={11}
+                      autoFocus
+                      autoComplete="one-time-code"
+                      placeholder="000000"
+                      className="py-6 pl-11 tracking-[0.25em]"
+                      value={codigo}
+                      disabled={disabled}
+                      onChange={(event) => setCodigo(event.target.value)}
+                    />
+                  </div>
+
                   <p className="text-muted-foreground text-xs">
                     Seis dígitos do autenticador de{' '}
                     <strong className="text-foreground font-medium">
