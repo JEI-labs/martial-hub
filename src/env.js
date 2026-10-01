@@ -39,6 +39,13 @@ export const env = createEnv({
      */
     ROOT_DOMAIN: z.string().optional(),
     /**
+     * Endereço do painel do dono do sistema, host completo
+     * (`martialhub.exemplo.com.br`). Pode estar fora do domínio raiz — e é
+     * melhor que esteja, para o painel do negócio não parecer mais uma
+     * academia. Sem ele, vale `app.<ROOT_DOMAIN>`.
+     */
+    MASTER_HOST: z.string().optional(),
+    /**
      * Credenciais da Vercel para cadastrar o domínio próprio do cliente
      * sozinho. Sem elas, a tela do master só guarda o domínio e diz que falta
      * cadastrar na mão.
@@ -72,6 +79,7 @@ export const env = createEnv({
     EVOLUTION_API_KEY: process.env.EVOLUTION_API_KEY,
     CRON_SECRET: process.env.CRON_SECRET,
     ROOT_DOMAIN: process.env.ROOT_DOMAIN,
+    MASTER_HOST: process.env.MASTER_HOST,
     VERCEL_TOKEN: process.env.VERCEL_TOKEN,
     VERCEL_PROJECT_ID: process.env.VERCEL_PROJECT_ID,
     VERCEL_TEAM_ID: process.env.VERCEL_TEAM_ID,

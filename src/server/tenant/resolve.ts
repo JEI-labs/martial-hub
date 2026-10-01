@@ -29,6 +29,17 @@ export function normalizeHost(host: string | null | undefined): string | null {
 }
 
 /**
+ * O endereço do painel do dono do sistema.
+ *
+ * `app.<raiz>` é só o padrão: o painel pode morar em outro domínio, e aí nada
+ * nele se parece com o endereço de um cliente.
+ */
+export function masterHost(): string | null {
+  if (env.MASTER_HOST) return normalizeHost(env.MASTER_HOST);
+  return env.ROOT_DOMAIN ? `app.${env.ROOT_DOMAIN.toLowerCase()}` : null;
+}
+
+/**
  * Subdomínio da academia dentro do nosso domínio raiz. Um domínio próprio não
  * cai aqui — ele é encontrado pela tabela de domínios.
  */
@@ -38,10 +49,13 @@ export function slugFromHost(host: string): string | null {
 
   const slug = host.slice(0, -(raiz.length + 1));
 
-  // `app.sistema.com.br` é a casa do master, não de uma academia
+  /* A casa do master não é academia nenhuma — nem quando ela mora dentro do
+     domínio raiz, caso em que uma academia com esse slug a esconderia. */
   if (!slug || slug.includes('.') || slug === 'app' || slug === 'www') {
     return null;
   }
+
+  if (host === masterHost()) return null;
 
   return slug;
 }

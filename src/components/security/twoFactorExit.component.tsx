@@ -2,9 +2,9 @@
 
 import { useRouter } from 'next/navigation';
 import { ArrowRight, LogOut } from 'lucide-react';
-import { signOut } from 'next-auth/react';
 
 import { Button } from '@/components/ui/button';
+import { sairDaConta } from '@/utils/sair';
 import { api } from '@/trpc/react';
 
 /**
@@ -44,7 +44,7 @@ export function TwoFactorExit({ destino }: { destino: string }) {
     <Button
       variant="ghost"
       className="text-muted-foreground"
-      onClick={() => signOut({ callbackUrl: '/auth/entrar' })}
+      onClick={() => sairDaConta()}
     >
       <LogOut className="mr-2 size-4" />
       Sair da conta

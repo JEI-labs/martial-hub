@@ -1,9 +1,8 @@
 import { EUserRole } from '@prisma/client';
 import { redirect } from 'next/navigation';
 
-import { env } from '@/env';
 import { getServerAuthSession } from '@/server/auth';
-import { getCurrentTenant } from '@/server/tenant/resolve';
+import { getCurrentTenant, masterHost } from '@/server/tenant/resolve';
 import { exigeDoisFatores, temDoisFatores } from '@/server/auth/twoFactor';
 import { TwoFactorRequired } from '@/components/security/twoFactorRequired.component';
 import { ThemeToggler } from '@/components/theme/theme-toggler';
@@ -29,9 +28,8 @@ export default async function MasterLayout({
      responder em academia.seusistema.com.br (ou pior, no domínio próprio do
      cliente) é anunciar a existência dele onde não devia. */
   if (tenant) {
-    redirect(
-      env.ROOT_DOMAIN ? `https://app.${env.ROOT_DOMAIN}/master` : '/painel',
-    );
+    const casa = masterHost();
+    redirect(casa ? `https://${casa}/master` : '/painel');
   }
 
   /* O dono do sistema enxerga todas as academias; sem segunda etapa, uma

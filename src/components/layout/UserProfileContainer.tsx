@@ -13,7 +13,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { signOut, useSession } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
+
+import { sairDaConta } from '@/utils/sair';
 import { LogOut, UserPen, Settings, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/trpc/react';
@@ -82,7 +84,10 @@ export function UserProfileContainer(): React.JSX.Element {
         <DropdownMenuSeparator />
         <DropdownMenuItem
           className="cursor-pointer gap-2 py-2 pr-4 pl-3"
-          onClick={() => signOut()}
+          /* Com destino explícito: sem ele o NextAuth devolve a pessoa para o
+             host configurado no servidor, e quem saía de uma academia caía na
+             tela de login de outra — com a marca da outra. */
+          onClick={() => sairDaConta()}
         >
           <LogOut className="h-4 w-4" />
           Sair
