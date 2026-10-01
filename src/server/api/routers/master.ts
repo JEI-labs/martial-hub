@@ -10,13 +10,13 @@ import { TRPCError } from '@trpc/server';
 import { hash } from 'argon2';
 import { z } from 'zod';
 
-import { env } from '@/env';
 import {
   addDomain,
   domainStatus,
   removeDomain,
   vercelEnabled,
 } from '@/server/vercel/domains';
+import { rootDomain } from '@/server/tenant/resolve';
 import {
   apontarSubdominio,
   dnsEnabled,
@@ -323,9 +323,8 @@ export const masterRouter = createTRPCRouter({
       }
 
       const senha = await hash(input.ownerPassword);
-      const hostname = env.ROOT_DOMAIN
-        ? `${input.slug}.${env.ROOT_DOMAIN}`
-        : null;
+      const raiz = rootDomain();
+      const hostname = raiz ? `${input.slug}.${raiz}` : null;
 
       const tenant = await ctx.prisma.$transaction(async (tx) => {
         const criado = await tx.tenant.create({
@@ -649,7 +648,7 @@ export const masterRouter = createTRPCRouter({
 
       const host =
         tenant.domains[0]?.hostname ??
-        (env.ROOT_DOMAIN ? `${tenant.slug}.${env.ROOT_DOMAIN}` : null);
+        (rootDomain() ? `${tenant.slug}.${rootDomain()}` : null);
 
       if (!host) {
         throw new TRPCError({

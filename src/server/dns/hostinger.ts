@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { env } from '@/env';
+import { rootDomain } from '@/server/tenant/resolve';
 
 /**
  * O DNS do subdomínio da academia, criado junto com ela.
@@ -25,7 +26,7 @@ const ALVO = (env.DNS_CNAME_TARGET ?? 'cname.vercel-dns.com')
   .replace(/\.+$/, '');
 
 export function dnsEnabled(): boolean {
-  return Boolean(env.HOSTINGER_API_TOKEN && env.ROOT_DOMAIN);
+  return Boolean(env.HOSTINGER_API_TOKEN && rootDomain());
 }
 
 /**
@@ -33,7 +34,7 @@ export function dnsEnabled(): boolean {
  * `academia`. Devolve null para o que não mora na nossa zona.
  */
 export function nomeNaZona(hostname: string): string | null {
-  const raiz = env.ROOT_DOMAIN?.toLowerCase();
+  const raiz = rootDomain();
   if (!raiz) return null;
 
   const host = hostname.trim().toLowerCase();
@@ -105,7 +106,7 @@ export async function apontarSubdominio(hostname: string): Promise<Resultado> {
     };
   }
 
-  const zona = env.ROOT_DOMAIN;
+  const zona = rootDomain();
 
   await chamar(`/zones/${zona}`, {
     method: 'DELETE',
@@ -139,7 +140,7 @@ export async function removerSubdominio(hostname: string): Promise<Resultado> {
   const nome = nomeNaZona(hostname);
   if (!nome) return { ok: false, error: 'Endereço fora da nossa zona.' };
 
-  const apagado = await chamar(`/zones/${env.ROOT_DOMAIN}`, {
+  const apagado = await chamar(`/zones/${rootDomain()}`, {
     method: 'DELETE',
     body: JSON.stringify({ filters: [{ name: nome, type: 'CNAME' }] }),
   });

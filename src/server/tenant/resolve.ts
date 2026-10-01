@@ -29,24 +29,35 @@ export function normalizeHost(host: string | null | undefined): string | null {
 }
 
 /**
+ * Tira de um valor de configuração o que não é host: esquema, caminho, porta,
+ * `www.` e espaço. Quem preenche essas variáveis é gente, e gente cola
+ * endereço inteiro — sem isto, `https://casa.com` virava `https` no corte da
+ * porta e o erro só aparecia como host que não existe.
+ */
+function somenteHost(valor: string | undefined): string | null {
+  if (!valor) return null;
+
+  const semEsquema = valor.trim().replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
+  return normalizeHost(semEsquema.split('/')[0]);
+}
+
+/** O domínio onde moram os subdomínios das academias. */
+export function rootDomain(): string | null {
+  return somenteHost(env.ROOT_DOMAIN);
+}
+
+/**
  * O endereço do painel do dono do sistema.
  *
  * `app.<raiz>` é só o padrão: o painel pode morar em outro domínio, e aí nada
  * nele se parece com o endereço de um cliente.
  */
 export function masterHost(): string | null {
-  if (env.MASTER_HOST) {
-    /* Quem preenche isto é gente, e gente cola endereço inteiro. Sem tirar o
-       esquema antes, o corte da porta transformaria `https://casa.com` em
-       `https` e o master seria mandado para um host que não existe. */
-    const semEsquema = env.MASTER_HOST.trim().replace(
-      /^[a-z][a-z0-9+.-]*:\/\//i,
-      '',
-    );
-    return normalizeHost(semEsquema.split('/')[0]);
-  }
+  const proprio = somenteHost(env.MASTER_HOST);
+  if (proprio) return proprio;
 
-  return env.ROOT_DOMAIN ? `app.${env.ROOT_DOMAIN.toLowerCase()}` : null;
+  const raiz = rootDomain();
+  return raiz ? `app.${raiz}` : null;
 }
 
 /**
@@ -54,7 +65,7 @@ export function masterHost(): string | null {
  * cai aqui — ele é encontrado pela tabela de domínios.
  */
 export function slugFromHost(host: string): string | null {
-  const raiz = env.ROOT_DOMAIN?.toLowerCase();
+  const raiz = rootDomain();
   if (!raiz || !host.endsWith(`.${raiz}`)) return null;
 
   const slug = host.slice(0, -(raiz.length + 1));
