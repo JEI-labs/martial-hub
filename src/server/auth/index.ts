@@ -26,6 +26,8 @@ declare module 'next-auth' {
       /** Academia a que a conta pertence. Nulo só para o dono do sistema. */
       tenantId: string | null;
       role: EUserRole;
+      /** Academia que o master está visitando para dar suporte. */
+      supportTenantId?: string | null;
     } & DefaultSession['user'];
   }
 
@@ -74,6 +76,8 @@ export const authOptions: NextAuthOptions = {
         session.user.email = token.email as string;
         session.user.tenantId = (token.tenantId as string | null) ?? null;
         session.user.role = token.role as EUserRole;
+        session.user.supportTenantId =
+          (token.supportTenantId as string | null) ?? null;
       }
       return session;
     },

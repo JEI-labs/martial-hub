@@ -3,7 +3,9 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { LogOut } from 'lucide-react';
 
+import { env } from '@/env';
 import { getServerAuthSession } from '@/server/auth';
+import { getCurrentTenant } from '@/server/tenant/resolve';
 import { ThemeToggler } from '@/components/theme/theme-toggler';
 import { MasterNav } from '@/components/master/masterNav.component';
 
@@ -14,10 +16,22 @@ import { MasterNav } from '@/components/master/masterNav.component';
 export default async function MasterLayout({
   children,
 }: LayoutProps<'/master'>) {
-  const session = await getServerAuthSession();
+  const [session, tenant] = await Promise.all([
+    getServerAuthSession(),
+    getCurrentTenant(),
+  ]);
 
   if (!session) redirect('/auth/entrar');
   if (session.user.role !== EUserRole.MASTER) redirect('/painel');
+
+  /* O painel do negócio não mora no endereço de cliente nenhum: deixá-lo
+     responder em academia.seusistema.com.br (ou pior, no domínio próprio do
+     cliente) é anunciar a existência dele onde não devia. */
+  if (tenant) {
+    redirect(
+      env.ROOT_DOMAIN ? `https://app.${env.ROOT_DOMAIN}/master` : '/painel',
+    );
+  }
 
   return (
     <div className="bg-background min-h-screen">

@@ -108,6 +108,7 @@ model Tenant {
   messageTemplates   MessageTemplate[]
   messageAutomations MessageAutomation[]
   messageLogs        MessageLog[]
+  supportAccesses    SupportAccess[]
 
   @@index([status])
 }
@@ -180,6 +181,21 @@ model TenantInvoice {
   @@index([dueDate])
 }
 
+/// Toda vez que o dono do sistema entra na academia para dar suporte. Acesso
+/// a dado de cliente precisa deixar rastro: quem entrou, onde e quando.
+model SupportAccess {
+  id        String   @id @default(uuid())
+  createdAt DateTime @default(now())
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+}
+
 model User {
   id        String    @id @default(uuid())
   name      String
@@ -207,6 +223,7 @@ model User {
   messageTemplates   MessageTemplate[]
   messageLogs        MessageLog[]
   messageAutomations MessageAutomation[]
+  supportAccesses    SupportAccess[]
 
   @@unique([tenantId, email])
   @@index([tenantId])

@@ -36,6 +36,10 @@
   --color-primary-foreground: hsl(var(--primary-foreground));
   --color-success: hsl(var(--success));
   --color-success-foreground: hsl(var(--success-foreground));
+  /* `--alert` já existia nos dois temas, mas sem este par o Tailwind não
+     gerava `bg-alert`: quem usava a cor tinha que escrever o hsl na mão. */
+  --color-alert: hsl(var(--alert));
+  --color-alert-foreground: hsl(var(--alert-foreground));
   --color-secondary: hsl(var(--secondary));
   --color-secondary-foreground: hsl(var(--secondary-foreground));
   --color-muted: hsl(var(--muted));

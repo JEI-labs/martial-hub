@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Plus } from 'lucide-react';
+import { LifeBuoy, Loader2, Plus } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,12 +19,37 @@ import { EmptyState } from '@/components/emptyState/emptyState.component';
 import { ListSkeleton } from '@/components/skeletons/listSkeleton.component';
 import { NewTenantDialog } from '@/components/master/newTenantDialog.component';
 import { TENANT_STATUS } from '@/common/constants/tenantStatus';
+import { useToast } from '@/hooks/use-toast';
 import { api } from '@/trpc/react';
 import { maskBRL } from '@/utils/masksUtils';
 
 export function TenantsTable() {
+  const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [novo, setNovo] = useState(false);
+  const [entrando, setEntrando] = useState<string | null>(null);
+
+  /* A sessão é por host: o cookie do master não vale no endereço da academia.
+     Por isso a entrada é um bilhete assinado, trocado por sessão lá dentro. */
+  const suporte = api.master.supportLink.useMutation({
+    onSuccess: (resultado) => {
+      const porta = window.location.port ? `:${window.location.port}` : '';
+      window.open(
+        `${window.location.protocol}//${resultado.host}${porta}${resultado.url}`,
+        '_blank',
+        'noopener',
+      );
+      setEntrando(null);
+    },
+    onError: (error) => {
+      setEntrando(null);
+      toast({
+        title: 'Não deu para entrar',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
 
   const { data, isLoading, refetch } = api.master.listTenants.useQuery({
     search: search || undefined,
@@ -69,6 +94,7 @@ export function TenantsTable() {
                 <TableHead className="text-right">Em aberto</TableHead>
                 <TableHead className="text-right">Alunos</TableHead>
                 <TableHead>Endereço</TableHead>
+                <TableHead className="text-right">Suporte</TableHead>
               </TableRow>
             </TableHeader>
 
@@ -116,6 +142,25 @@ export function TenantsTable() {
 
                     <TableCell className="text-muted-foreground text-xs">
                       {principal?.hostname ?? '—'}
+                    </TableCell>
+
+                    <TableCell className="text-right">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={entrando === tenant.id}
+                        onClick={() => {
+                          setEntrando(tenant.id);
+                          suporte.mutate({ tenantId: tenant.id });
+                        }}
+                      >
+                        {entrando === tenant.id ? (
+                          <Loader2 className="mr-2 size-4 animate-spin" />
+                        ) : (
+                          <LifeBuoy className="mr-2 size-4" />
+                        )}
+                        Entrar
+                      </Button>
                     </TableCell>
                   </TableRow>
                 );

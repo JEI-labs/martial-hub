@@ -10,6 +10,7 @@ import AppSidebarProvider from '@/providers/sidebarProvider';
 import { getServerAuthSession } from '@/server/auth';
 import { getCurrentTenant } from '@/server/tenant/resolve';
 import { TenantBlocked } from '@/components/layout/tenantBlocked.component';
+import { SupportBanner } from '@/components/layout/supportBanner.component';
 
 export default async function DashboardLayout({
   children,
@@ -22,12 +23,21 @@ export default async function DashboardLayout({
   if (!session) redirect('/auth/entrar');
 
   /* O dono do sistema não pertence a academia nenhuma: toda consulta daqui
-     filtra por tenant e viria recusada. A casa dele é /master. */
-  if (session.user.role === EUserRole.MASTER) redirect('/master');
+     filtraria por um tenant que ele não tem. A exceção é o acesso de
+     suporte, que carrega na sessão a academia que ele foi visitar — e só
+     vale no endereço dela. */
+  const emSuporte =
+    session.user.role === EUserRole.MASTER &&
+    Boolean(session.user.supportTenantId) &&
+    session.user.supportTenantId === tenant?.id;
+
+  if (session.user.role === EUserRole.MASTER && !emSuporte) {
+    redirect('/master');
+  }
 
   /* O endereço diz de quem é a casa. Logar numa academia e navegar na outra
      trocando o host tem que esbarrar aqui, não só no login. */
-  if (tenant && session.user.tenantId !== tenant.id) {
+  if (tenant && !emSuporte && session.user.tenantId !== tenant.id) {
     redirect('/auth/entrar');
   }
 
@@ -49,6 +59,10 @@ export default async function DashboardLayout({
     <AppSidebarProvider>
       <TenantTheme primaryColor={tenant?.branding?.primaryColor} />
       <div className="bg-background flex h-full w-full flex-col md:px-8">
+        {/* Dentro da coluna de conteúdo: ao lado da sidebar, no flex do
+            provider, a tarja virava uma irmã dela e caía no meio da tela. */}
+        {emSuporte && tenant && <SupportBanner tenantName={tenant.name} />}
+
         <div className="min-h-[calc(100vh-2rem)]">
           <div className="bg-card shadow-card flex items-center justify-between px-4 py-3 md:mt-6 md:rounded-2xl md:px-6">
             <div className="flex items-center gap-2">

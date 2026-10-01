@@ -9,6 +9,11 @@ export const AUTH_PAGE = '/auth/entrar';
 const authRoutes = '/auth/';
 const publicRoutes = ['/'];
 
+/* A entrada de suporte chega sem sessão de propósito: quem autoriza é o
+   bilhete assinado que ela própria confere. Barrá-la aqui mandaria o master
+   para o login da academia, que é justamente onde ele não tem conta. */
+const supportRoutes = '/suporte/';
+
 /**
  * Tudo que cair no matcher vai ser executado pelo proxy
  * Rotas excluidas: /api/ /trcp/ /_next/ /public/ /favicon.ico
@@ -28,6 +33,9 @@ export async function proxy(request: NextRequest) {
   const isLoggedIn = !!session;
   const isPublicRoute = publicRoutes.includes(nextUrl.pathname);
   const isAuthRoute = nextUrl.pathname.startsWith(authRoutes);
+  const isSupportRoute = nextUrl.pathname.startsWith(supportRoutes);
+
+  if (isSupportRoute) return;
 
   // Se for rota publica pode acessar
   if (isPublicRoute)

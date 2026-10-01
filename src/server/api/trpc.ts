@@ -127,7 +127,10 @@ export const protectedProcedure = t.procedure
       throw new TRPCError({ code: 'UNAUTHORIZED' });
     }
 
-    const { tenantId } = ctx.session.user;
+    /* O master em suporte não tem academia própria: a que vale é a que ele
+       está visitando, e ela veio assinada no bilhete de entrada. */
+    const { tenantId: tenantDaConta, supportTenantId } = ctx.session.user;
+    const tenantId = tenantDaConta ?? supportTenantId ?? null;
 
     /* Dado é da academia, não de quem está logado: o recepcionista enxerga os
        mesmos alunos que o dono. Sem tenant na sessão não há o que consultar —

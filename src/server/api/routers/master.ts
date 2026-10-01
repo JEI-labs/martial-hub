@@ -17,6 +17,7 @@ import {
   removeDomain,
   vercelEnabled,
 } from '@/server/vercel/domains';
+import { criarBilheteDeSuporte } from '@/server/support/handoff';
 
 const CENTS = 100;
 
@@ -498,4 +499,55 @@ export const masterRouter = createTRPCRouter({
 
     return { ok: true, atualizadas: resultado.count };
   }),
+
+  /**
+   * Entrada de suporte: devolve o endereço da academia já com o bilhete.
+   *
+   * O bilhete vale um minuto e a sessão que nasce dele continua sendo a do
+   * master — ninguém vira o dono da academia. Quem entrou e quando fica
+   * gravado do outro lado, quando o bilhete é trocado.
+   */
+  supportLink: masterProcedure
+    .input(z.object({ tenantId: z.string().uuid() }))
+    .mutation(async ({ ctx, input }) => {
+      const tenant = await ctx.prisma.tenant.findUnique({
+        where: { id: input.tenantId },
+        select: {
+          id: true,
+          slug: true,
+          domains: {
+            select: { hostname: true, isPrimary: true },
+            orderBy: { isPrimary: 'desc' },
+          },
+        },
+      });
+
+      if (!tenant) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Academia não encontrada',
+        });
+      }
+
+      const host =
+        tenant.domains[0]?.hostname ??
+        (env.ROOT_DOMAIN ? `${tenant.slug}.${env.ROOT_DOMAIN}` : null);
+
+      if (!host) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Esta academia ainda não tem endereço cadastrado.',
+        });
+      }
+
+      const bilhete = await criarBilheteDeSuporte(
+        ctx.session.user.id,
+        tenant.id,
+      );
+
+      return {
+        url: `/suporte/entrar?token=${encodeURIComponent(bilhete)}`,
+        host,
+      };
+    }),
 });
