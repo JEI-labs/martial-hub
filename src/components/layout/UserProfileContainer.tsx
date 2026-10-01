@@ -11,9 +11,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { signOut, useSession } from 'next-auth/react';
-import { LogOut, UserPen, Settings } from 'lucide-react';
+import { LogOut, UserPen, Settings, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/trpc/react';
 
@@ -21,6 +22,10 @@ export function UserProfileContainer(): React.JSX.Element {
   const { data: session } = useSession();
   const getMeApi = api.users.getMe.useQuery();
   const userData = getMeApi.data;
+  /* O estado da segunda etapa fica no próprio menu porque é a pergunta que
+     leva a pessoa a procurá-lo: "a minha está de pé?". Sem isto, a única
+     resposta era abrir a tela e olhar. */
+  const { data: seguranca } = api.security.status.useQuery();
 
   if (!session) return <Skeleton className="w-32 rounded-lg py-5" />;
 
@@ -53,14 +58,26 @@ export function UserProfileContainer(): React.JSX.Element {
             Configurações
           </DropdownMenuItem>
         </Link>
-        {/* <Link href="/seguranca">
-          <DropdownMenuItem className="cursor-not-allowed gap-2 py-2 pl-3 pr-4">
+        <Link href="/seguranca">
+          <DropdownMenuItem className="cursor-pointer gap-2 py-2 pr-4 pl-3">
             <ShieldCheck className="h-4 w-4" />
             Segurança
+            {seguranca &&
+              (seguranca.ativo ? (
+                <Badge variant="success" className="ml-auto">
+                  Ativa
+                </Badge>
+              ) : seguranca.obrigatorio ? (
+                <Badge variant="destructive" className="ml-auto">
+                  Pendente
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="ml-auto">
+                  Desligada
+                </Badge>
+              ))}
           </DropdownMenuItem>
-        </Link> */}
-
-        {/* <DropdownMenuSeparator /> */}
+        </Link>
 
         <DropdownMenuSeparator />
         <DropdownMenuItem
