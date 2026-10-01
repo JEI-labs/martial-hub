@@ -18,7 +18,11 @@ import {
   vercelEnabled,
 } from '@/server/vercel/domains';
 import { criarBilheteDeSuporte } from '@/server/support/handoff';
-import { DIAS_DE_AVISO, marcarVencidas } from '@/server/billing/invoices';
+import {
+  DIAS_DE_AVISO,
+  aplicarRegraDeCobranca,
+  reativarSePago,
+} from '@/server/billing/invoices';
 
 const CENTS = 100;
 
@@ -53,7 +57,7 @@ const ASSINATURAS_ATIVAS: Prisma.TenantSubscriptionWhereInput = {
 export const masterRouter = createTRPCRouter({
   /** Os números do negócio: receita recorrente, clientes e inadimplência. */
   overview: masterProcedure.query(async ({ ctx }) => {
-    await marcarVencidas();
+    await aplicarRegraDeCobranca();
 
     const limite = new Date();
     limite.setDate(limite.getDate() + DIAS_DE_AVISO);
@@ -444,7 +448,7 @@ export const masterRouter = createTRPCRouter({
         .default({}),
     )
     .query(async ({ ctx, input }) => {
-      await marcarVencidas();
+      await aplicarRegraDeCobranca();
 
       return ctx.prisma.tenantInvoice.findMany({
         where: {
@@ -514,16 +518,24 @@ export const masterRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      await ctx.prisma.tenantInvoice.update({
+      const fatura = await ctx.prisma.tenantInvoice.update({
         where: { id: input.id },
         data: {
           status: input.status,
           paidAt:
             input.status === ETenantInvoiceStatus.PAID ? new Date() : null,
         },
+        select: { tenantId: true },
       });
 
-      return { ok: true };
+      /* Quem pagou não pode continuar bloqueado esperando alguém lembrar de
+         reativar na mão. */
+      const reativada =
+        input.status === ETenantInvoiceStatus.PAID
+          ? await reativarSePago(fatura.tenantId)
+          : false;
+
+      return { ok: true, reativada };
     }),
 
   /** Marca como atrasada toda fatura em aberto que passou do vencimento. */

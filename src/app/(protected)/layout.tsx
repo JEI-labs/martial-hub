@@ -9,6 +9,7 @@ import { TenantTheme } from '@/components/theme/tenantTheme.component';
 import AppSidebarProvider from '@/providers/sidebarProvider';
 import { getServerAuthSession } from '@/server/auth';
 import { getCurrentTenant } from '@/server/tenant/resolve';
+import { temFaturaVencida } from '@/server/billing/invoices';
 import { TenantBlocked } from '@/components/layout/tenantBlocked.component';
 import { SupportBanner } from '@/components/layout/supportBanner.component';
 import { BillingBanner } from '@/components/tenant/billingBanner.component';
@@ -53,7 +54,11 @@ export default async function DashboardLayout({
     tenant.status !== ETenantStatus.ACTIVE &&
     tenant.status !== ETenantStatus.TRIAL
   ) {
-    return <TenantBlocked tenantName={tenant.name} />;
+    /* Bloqueio por fatura tem conserto conhecido, e dizer isso poupa um
+       telefonema: a tela explica o motivo em vez de só negar a entrada. */
+    const porFatura = await temFaturaVencida(tenant.id);
+
+    return <TenantBlocked tenantName={tenant.name} porFatura={porFatura} />;
   }
 
   return (

@@ -24,12 +24,20 @@ export function BillingBanner() {
 
   const dias = aviso.diasRestantes;
   const atrasada = aviso.atrasada;
+  const bloqueioProximo = aviso.fase === 'bloqueio_proximo';
 
-  const texto = atrasada
-    ? `Sua mensalidade do sistema venceu ${Math.abs(dias)} ${Math.abs(dias) === 1 ? 'dia' : 'dias'} atrás.`
-    : dias === 0
-      ? 'Sua mensalidade do sistema vence hoje.'
-      : `Sua mensalidade do sistema vence em ${dias} ${dias === 1 ? 'dia' : 'dias'}.`;
+  /* Três recados, em ordem de gravidade. O último é o único que fala em
+     bloqueio, e fala com data: "vai ser bloqueado" sem prazo não muda o
+     comportamento de ninguém. */
+  const texto = bloqueioProximo
+    ? aviso.diasParaBloqueio > 0
+      ? `Mensalidade atrasada há ${Math.abs(dias)} dias. O acesso ao sistema será bloqueado em ${aviso.diasParaBloqueio} ${aviso.diasParaBloqueio === 1 ? 'dia' : 'dias'}.`
+      : 'Mensalidade atrasada. O acesso ao sistema será bloqueado hoje.'
+    : atrasada
+      ? `Sua mensalidade do sistema venceu ${Math.abs(dias)} ${Math.abs(dias) === 1 ? 'dia' : 'dias'} atrás.`
+      : dias === 0
+        ? 'Sua mensalidade do sistema vence hoje.'
+        : `Sua mensalidade do sistema vence em ${dias} ${dias === 1 ? 'dia' : 'dias'}.`;
 
   const Icone = atrasada ? AlertTriangle : CalendarClock;
 
@@ -41,6 +49,9 @@ export function BillingBanner() {
         atrasada
           ? 'bg-destructive text-destructive-foreground'
           : 'bg-alert text-alert-foreground',
+        /* Na véspera do bloqueio a tarja pulsa: é o último aviso antes de a
+           academia perder o acesso. */
+        bloqueioProximo && 'animate-pulse font-medium',
       )}
     >
       <Icone className="size-4 shrink-0" aria-hidden />

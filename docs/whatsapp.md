@@ -276,3 +276,29 @@ parâmetros posicionais, na ordem em que aparecem no texto.
 
 No console da Meta, o caminho é **Casos de uso** → _Conectar-se com clientes
 pelo WhatsApp_, que faz surgir o item WhatsApp na lateral.
+
+## A régua de cobrança das academias
+
+Duas rotas, um segredo só. A das mensagens roda de hora em hora; a da
+cobrança, uma vez por dia basta:
+
+```cron
+0 * * * * curl -fsS -H "Authorization: Bearer SEU_SEGREDO" https://SEU-APP.vercel.app/api/cron/whatsapp >> $HOME/whatsapp-cron.log 2>&1
+30 8 * * * curl -fsS -H "Authorization: Bearer SEU_SEGREDO" https://SEU-APP.vercel.app/api/cron/cobranca >> $HOME/cobranca-cron.log 2>&1
+```
+
+A régua está em `src/server/billing/invoices.ts`, e é lá que os prazos mudam:
+
+| dia      | o que acontece                                              |
+| -------- | ----------------------------------------------------------- |
+| −7 até 0 | tarja amarela avisando o vencimento                         |
+| +1 a +6  | tarja vermelha: mensalidade atrasada                        |
+| +7       | o aviso passa a anunciar a data do bloqueio, com contagem   |
+| +14      | academia suspensa — ninguém da equipe entra, nada é apagado |
+
+A mesma rotina roda quando alguém abre uma tela do master ou da academia. O
+cron existe porque academia inadimplente costuma ser justamente a que parou
+de abrir o sistema.
+
+Marcar a fatura como paga no master devolve o acesso na hora, sem passo
+manual.

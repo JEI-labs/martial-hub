@@ -48,6 +48,11 @@ export function BillingAlert() {
       86400000,
   );
 
+  /* A régua vem do servidor junto com o aviso: contar os prazos de novo aqui
+     seria duas verdades sobre a mesma data. */
+  const bloqueioProximo = data.aviso?.fase === 'bloqueio_proximo';
+  const diasParaBloqueio = data.aviso?.diasParaBloqueio ?? 0;
+
   const total = emAberto.reduce((soma, f) => soma + f.amountCents, 0) / 100;
 
   return (
@@ -76,17 +81,25 @@ export function BillingAlert() {
 
       <div className="min-w-0 flex-1">
         <p className="font-medium">
-          {atrasada
-            ? `Mensalidade do sistema atrasada há ${Math.abs(dias)} ${Math.abs(dias) === 1 ? 'dia' : 'dias'}`
-            : dias === 0
-              ? 'Mensalidade do sistema vence hoje'
-              : `Mensalidade do sistema vence em ${dias} ${dias === 1 ? 'dia' : 'dias'}`}
+          {bloqueioProximo
+            ? diasParaBloqueio > 0
+              ? `O acesso será bloqueado em ${diasParaBloqueio} ${diasParaBloqueio === 1 ? 'dia' : 'dias'}`
+              : 'O acesso será bloqueado hoje'
+            : atrasada
+              ? `Mensalidade do sistema atrasada há ${Math.abs(dias)} ${Math.abs(dias) === 1 ? 'dia' : 'dias'}`
+              : dias === 0
+                ? 'Mensalidade do sistema vence hoje'
+                : `Mensalidade do sistema vence em ${dias} ${dias === 1 ? 'dia' : 'dias'}`}
         </p>
         <p className="text-muted-foreground text-sm">
           {emAberto.length > 1
             ? `${emAberto.length} faturas em aberto, somando ${maskBRL(total, true)}.`
             : `${maskBRL(proxima.amountCents / 100, true)} · vencimento em ${new Date(proxima.dueDate).toLocaleDateString('pt-BR')}.`}
-          {atrasada && ' O acesso ao sistema pode ser suspenso.'}
+          {bloqueioProximo
+            ? ` Atrasada há ${Math.abs(dias)} dias. Assim que o prazo acabar, ninguém da academia consegue entrar — os dados continuam guardados.`
+            : atrasada
+              ? ' O acesso ao sistema pode ser suspenso.'
+              : ''}
         </p>
       </div>
 

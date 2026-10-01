@@ -9,9 +9,8 @@ import { hash } from 'argon2';
 import { z } from 'zod';
 
 import {
-  DIAS_DE_AVISO,
-  diasAte,
-  marcarVencidas,
+  aplicarRegraDeCobranca,
+  faseDaCobranca,
 } from '@/server/billing/invoices';
 import { ETenantInvoiceStatus } from '@prisma/client';
 
@@ -238,7 +237,7 @@ export const tenantRouter = createTRPCRouter({
    * ver a própria conta.
    */
   getBilling: protectedProcedure.query(async ({ ctx }) => {
-    await marcarVencidas();
+    await aplicarRegraDeCobranca();
 
     const [assinatura, faturas] = await Promise.all([
       ctx.prisma.tenantSubscription.findUnique({
@@ -274,7 +273,7 @@ export const tenantRouter = createTRPCRouter({
       (a, b) => a.dueDate.getTime() - b.dueDate.getTime(),
     )[0];
 
-    const dias = maisUrgente ? diasAte(maisUrgente.dueDate) : null;
+    const regua = maisUrgente ? faseDaCobranca(maisUrgente.dueDate) : null;
 
     return {
       assinatura,
@@ -283,13 +282,17 @@ export const tenantRouter = createTRPCRouter({
         quantidade: emAberto.length,
         valor: emAberto.reduce((total, f) => total + f.amountCents, 0) / 100,
       },
+      /* Fora da janela de aviso não há o que mostrar: fatura que vence daqui a
+         vinte dias não precisa de tarja. */
       aviso:
-        maisUrgente && dias !== null && dias <= DIAS_DE_AVISO
+        maisUrgente && regua && regua.fase !== 'em_dia'
           ? {
-              diasRestantes: dias,
+              fase: regua.fase,
+              diasRestantes: regua.dias,
+              diasParaBloqueio: regua.diasParaBloqueio,
               valor: maisUrgente.amountCents / 100,
               dueDate: maisUrgente.dueDate,
-              atrasada: dias < 0,
+              atrasada: regua.dias < 0,
             }
           : null,
     };
