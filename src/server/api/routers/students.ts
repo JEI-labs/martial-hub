@@ -1,4 +1,9 @@
-import { createTRPCRouter, protectedProcedure } from '@/server/api/trpc';
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  staffProcedure,
+  teacherProcedure,
+} from '@/server/api/trpc';
 
 import {
   createStudentSchema,
@@ -25,7 +30,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 export const studentRouter = createTRPCRouter({
-  create: protectedProcedure
+  create: staffProcedure
     .input(createStudentSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -168,7 +173,7 @@ export const studentRouter = createTRPCRouter({
       }
     }),
 
-  updateAvatar: protectedProcedure
+  updateAvatar: staffProcedure
     .input(updateAvatarSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -211,7 +216,7 @@ export const studentRouter = createTRPCRouter({
       };
     }),
 
-  updateByID: protectedProcedure
+  updateByID: staffProcedure
     .input(updateStudentSchema)
     .mutation(async ({ input, ctx }) => {
       const userId = ctx.session.user.id;
@@ -259,7 +264,7 @@ export const studentRouter = createTRPCRouter({
     }),
 
   /** Só a graduação: a tela do aluno edita isso num modal à parte. */
-  updateGraduation: protectedProcedure
+  updateGraduation: teacherProcedure
     .input(
       z.object({
         id: z.string(),
@@ -511,7 +516,7 @@ export const studentRouter = createTRPCRouter({
    * aula que o aluno já teve e não pagou, e sumir com elas seria a academia
    * perdoar uma dívida sem ninguém pedir.
    */
-  changePlan: protectedProcedure
+  changePlan: staffProcedure
     .input(z.object({ studentId: z.string(), planId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -663,7 +668,7 @@ export const studentRouter = createTRPCRouter({
    * treina mais seria erro de cobrança. As atrasadas ficam: é aula que já
    * aconteceu e não foi paga.
    */
-  cancelEnrollment: protectedProcedure
+  cancelEnrollment: staffProcedure
     .input(z.object({ studentId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -724,7 +729,7 @@ export const studentRouter = createTRPCRouter({
       }
     }),
 
-  delete: protectedProcedure
+  delete: staffProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;

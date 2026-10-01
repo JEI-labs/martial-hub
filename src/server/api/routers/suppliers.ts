@@ -1,5 +1,9 @@
 // server/api/routers/supplier.ts
-import { createTRPCRouter, protectedProcedure } from '@/server/api/trpc';
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  ownerProcedure,
+} from '@/server/api/trpc';
 import { paginationSchema } from '@/server/validations/pagination';
 import {
   createSupplierSchema,
@@ -11,7 +15,7 @@ import { Prisma } from '@prisma/client';
 
 export const supplierRouter = createTRPCRouter({
   // --- CREATE ---
-  create: protectedProcedure
+  create: ownerProcedure
     .input(createSupplierSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -46,7 +50,7 @@ export const supplierRouter = createTRPCRouter({
     }),
 
   // --- UPDATE ---
-  update: protectedProcedure
+  update: ownerProcedure
     .input(updateSupplierSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -178,7 +182,7 @@ export const supplierRouter = createTRPCRouter({
     }),
 
   // --- DELETE ---
-  delete: protectedProcedure
+  delete: ownerProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const { tenantId } = ctx;

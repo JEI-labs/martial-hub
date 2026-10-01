@@ -14,7 +14,10 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
 
+import type { EUserRole } from '@prisma/client';
 import Image from 'next/image';
+
+import { ROLE_SECTIONS } from '@/common/constants/roles';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 
@@ -43,11 +46,20 @@ interface AppSidebarProps {
   /** Marca da academia; sem ela, a do sistema. */
   logoUrl?: string | null;
   tenantName?: string | null;
+  role?: EUserRole;
 }
 
-export function AppSidebar({ logoUrl, tenantName }: AppSidebarProps) {
+export function AppSidebar({ logoUrl, tenantName, role }: AppSidebarProps) {
   const path = usePathname();
   const logo = logoUrl ?? '/images/logo.png';
+
+  /* Menu que leva a uma tela proibida é só frustração: o professor não vê
+     Financeiro, a recepção não vê Cadastros. O servidor recusa de qualquer
+     jeito; isto é para não oferecer. */
+  const permitidos = role ? ROLE_SECTIONS[role] : null;
+  const itens = permitidos
+    ? sidebarItems.filter((item) => permitidos.includes(item.url))
+    : sidebarItems;
 
   return (
     <Sidebar>
@@ -70,7 +82,7 @@ export function AppSidebar({ logoUrl, tenantName }: AppSidebarProps) {
       <SidebarContent>
         <SidebarGroup>
           <SidebarMenu className="gap-1">
-            {sidebarItems.map((item) => (
+            {itens.map((item) => (
               <SidebarMenuItem key={item.title}>
                 <SidebarMenuButton
                   asChild

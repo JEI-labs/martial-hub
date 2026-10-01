@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
-import { createTRPCRouter, protectedProcedure } from '../trpc';
+import { createTRPCRouter, protectedProcedure, ownerProcedure } from '../trpc';
 import {
   createPromotionSchema,
   updatePromotionSchema,
@@ -73,7 +73,7 @@ export const promotionsRouter = createTRPCRouter({
     });
   }),
 
-  create: protectedProcedure
+  create: ownerProcedure
     .input(createPromotionSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -97,7 +97,7 @@ export const promotionsRouter = createTRPCRouter({
       return { message: 'Promoção criada', data: promotion };
     }),
 
-  update: protectedProcedure
+  update: ownerProcedure
     .input(updatePromotionSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -127,7 +127,7 @@ export const promotionsRouter = createTRPCRouter({
       return { message: 'Promoção atualizada' };
     }),
 
-  delete: protectedProcedure
+  delete: ownerProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;

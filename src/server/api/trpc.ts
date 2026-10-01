@@ -11,6 +11,8 @@ import { initTRPC, TRPCError } from '@trpc/server';
 import superjson from 'superjson';
 import { ZodError } from 'zod';
 
+import { EUserRole } from '@prisma/client';
+
 import { getServerAuthSession } from '@/server/auth';
 import { prisma } from '@/server/db';
 
@@ -147,21 +149,38 @@ export const protectedProcedure = t.procedure
   });
 
 /**
- * Procedure de quem manda na academia. Recepção e professor usam o sistema,
- * mas não mexem na marca nem em quem tem acesso.
+ * Quem pode o quê.
+ *
+ * MASTER entra em tudo porque é quem dá suporte. OWNER manda na academia.
+ * STAFF é a recepção: aluno e dinheiro do dia a dia, sem mexer no que define
+ * a academia. TEACHER é o professor: aluno e graduação, e só.
  */
-export const ownerProcedure = protectedProcedure.use(({ ctx, next }) => {
-  const { role } = ctx.session.user;
+const exigirPapel = (papeis: ReadonlyArray<EUserRole>) =>
+  protectedProcedure.use(({ ctx, next }) => {
+    const { role } = ctx.session.user;
 
-  if (role !== 'OWNER' && role !== 'MASTER') {
-    throw new TRPCError({
-      code: 'FORBIDDEN',
-      message: 'Só o dono da academia pode alterar isto.',
-    });
-  }
+    if (role !== EUserRole.MASTER && !papeis.includes(role)) {
+      throw new TRPCError({
+        code: 'FORBIDDEN',
+        message: 'Seu acesso não permite esta ação.',
+      });
+    }
 
-  return next({ ctx });
-});
+    return next({ ctx });
+  });
+
+/** Define a academia: planos, cadastros, marca, equipe, WhatsApp. */
+export const ownerProcedure = exigirPapel([EUserRole.OWNER]);
+
+/** O dia a dia da recepção: aluno, matrícula, pagamento, lançamento. */
+export const staffProcedure = exigirPapel([EUserRole.OWNER, EUserRole.STAFF]);
+
+/** Tudo que o professor também faz: olhar aluno e registrar graduação. */
+export const teacherProcedure = exigirPapel([
+  EUserRole.OWNER,
+  EUserRole.STAFF,
+  EUserRole.TEACHER,
+]);
 
 /**
  * Procedure do dono do sistema: enxerga todas as academias e não pertence a
@@ -174,7 +193,7 @@ export const masterProcedure = t.procedure
       throw new TRPCError({ code: 'UNAUTHORIZED' });
     }
 
-    if (ctx.session.user.role !== 'MASTER') {
+    if (ctx.session.user.role !== EUserRole.MASTER) {
       throw new TRPCError({ code: 'FORBIDDEN' });
     }
 

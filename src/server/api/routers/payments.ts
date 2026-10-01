@@ -4,7 +4,7 @@ import {
   EPaymentMethod,
   PaymentStatus,
 } from '@prisma/client';
-import { createTRPCRouter, protectedProcedure } from '../trpc';
+import { createTRPCRouter, protectedProcedure, staffProcedure } from '../trpc';
 import { calculateDiscount } from '@/utils/discountUtils';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
@@ -97,7 +97,7 @@ export const paymentsRouter = createTRPCRouter({
       };
     }),
 
-  updatePayment: protectedProcedure
+  updatePayment: staffProcedure
     .input(
       z.object({
         studentId: z.string(),

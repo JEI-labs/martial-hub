@@ -1,11 +1,15 @@
-import { createTRPCRouter, protectedProcedure } from '@/server/api/trpc';
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  ownerProcedure,
+} from '@/server/api/trpc';
 import { createPlanSchema, updatePlanSchema } from '@/server/validations/plans';
 import { Prisma } from '@prisma/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
 export const plansRouter = createTRPCRouter({
-  create: protectedProcedure
+  create: ownerProcedure
     .input(createPlanSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -117,7 +121,7 @@ export const plansRouter = createTRPCRouter({
       };
     }),
 
-  delete: protectedProcedure
+  delete: ownerProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -137,7 +141,7 @@ export const plansRouter = createTRPCRouter({
       return { ok: true };
     }),
 
-  update: protectedProcedure
+  update: ownerProcedure
     .input(updatePlanSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;

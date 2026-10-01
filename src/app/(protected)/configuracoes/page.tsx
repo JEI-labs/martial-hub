@@ -5,6 +5,9 @@ import { Palette } from 'lucide-react';
 import { BreadcrumbUpdater } from '@/contexts/breadcrumb';
 import { PageIntro } from '@/components/pageIntro/pageIntro.component';
 import { BrandingForm } from '@/components/tenant/brandingForm.component';
+import { TeamCard } from '@/components/tenant/teamCard.component';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useSession } from 'next-auth/react';
 
 const breadcrumbItems = [
   { label: 'Home', href: '/painel' },
@@ -12,6 +15,8 @@ const breadcrumbItems = [
 ];
 
 export default function ConfiguracoesPage() {
+  const { data: session } = useSession();
+
   return (
     <div className="w-full">
       <BreadcrumbUpdater items={breadcrumbItems} />
@@ -37,7 +42,20 @@ export default function ConfiguracoesPage() {
           endereço vê essa marca já na tela de login, antes de digitar a senha.
         </PageIntro>
 
-        <BrandingForm />
+        <Tabs defaultValue="aparencia" className="w-full">
+          <TabsList>
+            <TabsTrigger value="aparencia">Aparência</TabsTrigger>
+            <TabsTrigger value="equipe">Equipe</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="aparencia" className="mt-4">
+            <BrandingForm />
+          </TabsContent>
+
+          <TabsContent value="equipe" className="mt-4">
+            <TeamCard currentUserId={session?.user.id ?? ''} />
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );

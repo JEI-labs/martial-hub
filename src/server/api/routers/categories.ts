@@ -1,5 +1,9 @@
 // server/api/routers/category.ts
-import { createTRPCRouter, protectedProcedure } from '@/server/api/trpc';
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  ownerProcedure,
+} from '@/server/api/trpc';
 import { paginationSchema } from '@/server/validations/pagination';
 import {
   createCategorySchema,
@@ -11,7 +15,7 @@ import { ECategoryStatus, Prisma } from '@prisma/client';
 
 export const categoryRouter = createTRPCRouter({
   // --- CREATE ---
-  create: protectedProcedure
+  create: ownerProcedure
     .input(createCategorySchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -55,7 +59,7 @@ export const categoryRouter = createTRPCRouter({
     }),
 
   // --- UPDATE ---
-  update: protectedProcedure
+  update: ownerProcedure
     .input(updateCategorySchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -191,7 +195,7 @@ export const categoryRouter = createTRPCRouter({
     }),
 
   // --- DELETE ---
-  delete: protectedProcedure
+  delete: ownerProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const { tenantId } = ctx;

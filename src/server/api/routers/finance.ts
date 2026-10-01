@@ -1,5 +1,9 @@
 // server/api/routers/finance.ts
-import { createTRPCRouter, protectedProcedure } from '@/server/api/trpc';
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  staffProcedure,
+} from '@/server/api/trpc';
 import { createFinanceEntrySchema } from '@/server/validations/finance';
 import { paginationSchema } from '@/server/validations/pagination';
 import { convertToDate } from '@/utils/converterUtils';
@@ -100,7 +104,7 @@ export const financeRouter = createTRPCRouter({
       }
     }),
 
-  create: protectedProcedure
+  create: staffProcedure
     .input(createFinanceEntrySchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -141,7 +145,7 @@ export const financeRouter = createTRPCRouter({
       }
     }),
 
-  update: protectedProcedure
+  update: staffProcedure
     .input(z.object({ id: z.string() }).merge(createFinanceEntrySchema))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -182,7 +186,7 @@ export const financeRouter = createTRPCRouter({
       return { ok: true, data: updated };
     }),
 
-  delete: protectedProcedure
+  delete: staffProcedure
     .input(
       z.object({
         id: z.string(),

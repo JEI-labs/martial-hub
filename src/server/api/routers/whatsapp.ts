@@ -6,7 +6,12 @@ import {
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
-import { createTRPCRouter, protectedProcedure } from '../trpc';
+import {
+  createTRPCRouter,
+  ownerProcedure,
+  protectedProcedure,
+  staffProcedure,
+} from '../trpc';
 import {
   extractPlaceholders,
   renderTemplate,
@@ -115,7 +120,7 @@ export const whatsappRouter = createTRPCRouter({
   }),
 
   /** Cria a conexão e já devolve o QR para escanear. */
-  createConnection: protectedProcedure
+  createConnection: ownerProcedure
     .input(
       z.object({
         label: z.string().trim().min(1, 'Dê um nome para o número').max(60),
@@ -257,7 +262,7 @@ export const whatsappRouter = createTRPCRouter({
     }),
 
   /** Liga uma conexão e desliga as outras, numa transação só. */
-  activateConnection: protectedProcedure
+  activateConnection: ownerProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -290,7 +295,7 @@ export const whatsappRouter = createTRPCRouter({
     }),
 
   /** Remove a conexão e, se for nossa, apaga a instância do servidor. */
-  deleteConnection: protectedProcedure
+  deleteConnection: ownerProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -328,7 +333,7 @@ export const whatsappRouter = createTRPCRouter({
     });
   }),
 
-  saveTemplate: protectedProcedure
+  saveTemplate: ownerProcedure
     .input(
       z.object({
         id: z.string().optional(),
@@ -382,7 +387,7 @@ export const whatsappRouter = createTRPCRouter({
       return { message: 'Modelo criado' };
     }),
 
-  deleteTemplate: protectedProcedure
+  deleteTemplate: ownerProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
@@ -439,7 +444,7 @@ export const whatsappRouter = createTRPCRouter({
     return automations;
   }),
 
-  saveAutomation: protectedProcedure
+  saveAutomation: ownerProcedure
     .input(
       z.object({
         event: z.nativeEnum(EMessageEvent),
@@ -492,7 +497,7 @@ export const whatsappRouter = createTRPCRouter({
     }),
 
   /** Roda a rotina agora, para conferir sem esperar o horário. */
-  runAutomationsNow: protectedProcedure.mutation(async ({ ctx }) => {
+  runAutomationsNow: staffProcedure.mutation(async ({ ctx }) => {
     const userId = ctx.session.user.id;
     const { tenantId } = ctx;
     if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED' });
@@ -549,7 +554,7 @@ export const whatsappRouter = createTRPCRouter({
       };
     }),
 
-  sendToStudent: protectedProcedure
+  sendToStudent: staffProcedure
     .input(
       z.object({
         studentId: z.string(),
