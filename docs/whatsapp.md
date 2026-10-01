@@ -279,12 +279,24 @@ pelo WhatsApp_, que faz surgir o item WhatsApp na lateral.
 
 ## A régua de cobrança das academias
 
-Duas rotas, um segredo só. A das mensagens roda de hora em hora; a da
-cobrança, uma vez por dia basta:
+Duas rotas, um segredo só, em dois lugares diferentes — e o motivo é o plano
+Hobby da Vercel, que dispara cron uma vez por dia.
+
+A das **mensagens** precisa rodar de hora em hora (o "a partir das 9h" de cada
+regra depende disso), então fica no crontab da VM:
 
 ```cron
 0 * * * * curl -fsS -H "Authorization: Bearer SEU_SEGREDO" https://SEU-APP.vercel.app/api/cron/whatsapp >> $HOME/whatsapp-cron.log 2>&1
-30 8 * * * curl -fsS -H "Authorization: Bearer SEU_SEGREDO" https://SEU-APP.vercel.app/api/cron/cobranca >> $HOME/cobranca-cron.log 2>&1
+```
+
+A da **cobrança** roda uma vez por dia e cabe na Vercel: está declarada em
+`vercel.json` e não precisa de nada na VM. O Vercel Cron manda o `CRON_SECRET`
+como Bearer sozinho — basta a variável estar no projeto. No Hobby o horário é
+aproximado dentro da hora escolhida, o que não faz diferença para uma régua
+contada em dias.
+
+```json
+{ "crons": [{ "path": "/api/cron/cobranca", "schedule": "0 9 * * *" }] }
 ```
 
 A régua está em `src/server/billing/invoices.ts`, e é lá que os prazos mudam:

@@ -10,7 +10,12 @@ import { aplicarRegraDeCobranca } from '@/server/billing/invoices';
  * costuma ser justamente a que parou de abrir o sistema — sem este cron, o
  * bloqueio só aconteceria no dia em que o dono resolvesse entrar.
  *
- * Mesmo segredo do cron das mensagens, no mesmo crontab da VM.
+ * Quem chama é o Vercel Cron, uma vez por dia (ver `vercel.json`). Ele manda
+ * o `CRON_SECRET` como Bearer sozinho, então a conferência abaixo serve para
+ * os dois casos: a chamada dele e a sua, na mão.
+ *
+ * A das mensagens continua na VM porque precisa rodar de hora em hora, e o
+ * plano Hobby da Vercel só dispara uma vez por dia. Esta aqui cabe.
  */
 export async function GET(request: NextRequest) {
   if (!env.CRON_SECRET) {
