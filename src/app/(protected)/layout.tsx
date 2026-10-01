@@ -21,17 +21,19 @@ export default async function DashboardLayout({
 
   if (!session) redirect('/auth/entrar');
 
-  const ehMaster = session.user.role === EUserRole.MASTER;
+  /* O dono do sistema não pertence a academia nenhuma: toda consulta daqui
+     filtra por tenant e viria recusada. A casa dele é /master. */
+  if (session.user.role === EUserRole.MASTER) redirect('/master');
 
   /* O endereço diz de quem é a casa. Logar numa academia e navegar na outra
      trocando o host tem que esbarrar aqui, não só no login. */
-  if (tenant && !ehMaster && session.user.tenantId !== tenant.id) {
+  if (tenant && session.user.tenantId !== tenant.id) {
     redirect('/auth/entrar');
   }
 
-  /* Endereço que não é de academia nenhuma: só o dono do sistema passa. Em
-     desenvolvimento não há domínio para resolver, então segue. */
-  if (!tenant && !ehMaster && process.env.NODE_ENV !== 'development') {
+  /* Endereço que não é de academia nenhuma. Em desenvolvimento não há domínio
+     para resolver, então segue. */
+  if (!tenant && process.env.NODE_ENV !== 'development') {
     redirect('/auth/entrar');
   }
 

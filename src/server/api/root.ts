@@ -11,6 +11,7 @@ import { promotionsRouter } from './routers/promotions';
 import { whatsappRouter } from './routers/whatsapp';
 import { dashboardRouter } from './routers/dashboard';
 import { tenantRouter } from './routers/tenant';
+import { masterRouter } from './routers/master';
 
 /**
  * This is the primary router for your server.
@@ -30,6 +31,7 @@ export const appRouter = createTRPCRouter({
   whatsapp: whatsappRouter,
   dashboard: dashboardRouter,
   tenant: tenantRouter,
+  master: masterRouter,
 });
 
 // export type definition of API

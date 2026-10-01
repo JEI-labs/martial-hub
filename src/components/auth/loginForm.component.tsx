@@ -17,7 +17,7 @@ import { useState } from 'react';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { signIn } from 'next-auth/react';
+import { getSession, signIn } from 'next-auth/react';
 import { Form } from '@/components/ui/form';
 import { FormInputComponent } from '@/components/forms/formInput/formInput.component';
 
@@ -65,9 +65,15 @@ export function LoginForm({
     } else if (result && result.status === 200) {
       setErrorMessage('');
       form.reset();
+
+      /* O dono do sistema não tem academia: mandá-lo para o painel de uma
+         deixaria toda consulta recusada por falta de tenant. */
+      const session = await getSession();
+      const destino = session?.user.role === 'MASTER' ? '/master' : '/painel';
+
       // client-side nav keeps the SPA transition; refresh re-runs server
       // components so they see the session cookie signIn just set.
-      router.push('/financeiro/resumo');
+      router.push(destino);
       router.refresh();
     } else {
       setErrorMessage('Houve um erro inexperado, tente novamente mais tarde.');
