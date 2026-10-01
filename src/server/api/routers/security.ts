@@ -1,5 +1,6 @@
 import { createTRPCRouter, sessionProcedure } from '@/server/api/trpc';
 import { TRPCError } from '@trpc/server';
+import { hash, verify } from 'argon2';
 import { z } from 'zod';
 
 import {
@@ -166,6 +167,45 @@ export const securityRouter = createTRPCRouter({
           twoFactorEnabledAt: null,
           twoFactorRecoveryCodes: [],
         },
+      });
+
+      return { ok: true };
+    }),
+  /**
+   * Troca a própria senha.
+   *
+   * Existe aqui, e não só no perfil, porque o dono do sistema não entra na
+   * área das academias — era a única conta sem como trocar a sua.
+   *
+   * Pede a senha atual: sessão aberta em máquina alheia não pode virar troca
+   * de senha, senão o dono perde a conta sem nem saber.
+   */
+  changePassword: sessionProcedure
+    .input(
+      z.object({
+        atual: z.string().min(1, 'Informe a senha atual'),
+        nova: z
+          .string()
+          .min(8, 'A senha nova precisa de pelo menos 8 letras')
+          .max(72),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const user = await ctx.prisma.user.findUniqueOrThrow({
+        where: { id: ctx.session.user.id },
+        select: { password: true },
+      });
+
+      if (!(await verify(user.password, input.atual))) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Senha atual incorreta.',
+        });
+      }
+
+      await ctx.prisma.user.update({
+        where: { id: ctx.session.user.id },
+        data: { password: await hash(input.nova) },
       });
 
       return { ok: true };

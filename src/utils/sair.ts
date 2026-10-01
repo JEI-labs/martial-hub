@@ -13,5 +13,9 @@ import { signOut } from 'next-auth/react';
  */
 export async function sairDaConta() {
   await signOut({ redirect: false });
+
+  /* Carga inteira de propósito, e não `router.push`: sair tem de largar
+     também o que o cliente guardou em memória da pessoa que estava logada. */
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
   window.location.href = '/auth/entrar';
 }

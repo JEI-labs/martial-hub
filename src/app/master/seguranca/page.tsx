@@ -1,6 +1,7 @@
 'use client';
 
 import { TwoFactorCard } from '@/components/security/twoFactorCard.component';
+import { PasswordCard } from '@/components/security/passwordCard.component';
 
 export default function MasterSeguranca() {
   return (
@@ -14,6 +15,7 @@ export default function MasterSeguranca() {
       </div>
 
       <TwoFactorCard />
+      <PasswordCard />
     </div>
   );
 }
