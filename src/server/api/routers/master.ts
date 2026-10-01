@@ -17,6 +17,7 @@ import {
   removeDomain,
   vercelEnabled,
 } from '@/server/vercel/domains';
+import { exigeDoisFatores } from '@/server/auth/twoFactor';
 import { criarBilheteDeSuporte } from '@/server/support/handoff';
 import {
   DIAS_DE_AVISO,
@@ -219,7 +220,15 @@ export const masterRouter = createTRPCRouter({
           branding: { select: { primaryColor: true, logoUrl: true } },
           domains: { orderBy: { isPrimary: 'desc' } },
           users: {
-            select: { id: true, name: true, email: true, role: true },
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+              /* Só a data em que ligou. O segredo e os códigos de recuperação
+                 não saem do servidor nem para o dono do sistema. */
+              twoFactorEnabledAt: true,
+            },
             orderBy: { role: 'asc' },
           },
           invoices: { orderBy: { dueDate: 'desc' }, take: 24 },
@@ -234,7 +243,21 @@ export const masterRouter = createTRPCRouter({
         });
       }
 
-      return { ...tenant, vercelConfigurada: vercelEnabled() };
+      return {
+        ...tenant,
+        /* A regra de quem é obrigado a ter a segunda etapa é desta camada —
+           a tela só mostra o resultado. */
+        users: tenant.users.map(({ twoFactorEnabledAt, ...usuario }) => ({
+          ...usuario,
+          doisFatores: twoFactorEnabledAt
+            ? ('ativo' as const)
+            : exigeDoisFatores(usuario.role)
+              ? ('pendente' as const)
+              : ('opcional' as const),
+          doisFatoresDesde: twoFactorEnabledAt,
+        })),
+        vercelConfigurada: vercelEnabled(),
+      };
     }),
 
   /**

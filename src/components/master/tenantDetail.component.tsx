@@ -9,6 +9,8 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  ShieldAlert,
+  ShieldCheck,
   Trash2,
 } from 'lucide-react';
 
@@ -328,6 +330,37 @@ export function TenantDetail({ tenantId }: { tenantId: string }) {
                   {usuario.email}
                 </p>
               </div>
+              {/* O master precisa saber se a conta que abre a academia tem a
+                  segunda chave: é a diferença entre uma senha vazada e um
+                  estrago. Para recepção e professor a etapa é opcional, então
+                  a falta dela aqui é informação, não alarme. */}
+              <Badge
+                variant={
+                  usuario.doisFatores === 'ativo'
+                    ? 'success'
+                    : usuario.doisFatores === 'pendente'
+                      ? 'destructive'
+                      : 'secondary'
+                }
+                title={
+                  usuario.doisFatoresDesde
+                    ? `Ativa desde ${new Date(usuario.doisFatoresDesde).toLocaleDateString('pt-BR')}`
+                    : undefined
+                }
+                className="gap-1"
+              >
+                {usuario.doisFatores === 'ativo' ? (
+                  <ShieldCheck className="size-3" aria-hidden />
+                ) : (
+                  <ShieldAlert className="size-3" aria-hidden />
+                )}
+                {usuario.doisFatores === 'ativo'
+                  ? '2FA ativo'
+                  : usuario.doisFatores === 'pendente'
+                    ? '2FA pendente'
+                    : 'sem 2FA'}
+              </Badge>
+
               <Badge variant="outline">{ROLE_INFO[usuario.role].label}</Badge>
             </div>
           ))}
