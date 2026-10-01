@@ -24,7 +24,14 @@ export async function authorize(
   // da Vercel e a tela mostra "erro inesperado" em vez de acusar a senha.
   const user = await prisma.user.findFirst({
     where: { email: creds.username.toLowerCase() },
-    select: { id: true, name: true, email: true, password: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      password: true,
+      tenantId: true,
+      role: true,
+    },
   });
 
   if (!user) return null;

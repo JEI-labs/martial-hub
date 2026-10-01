@@ -9,6 +9,7 @@ export const plansRouter = createTRPCRouter({
     .input(createPlanSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) {
         throw new TRPCError({
           code: 'UNAUTHORIZED',
@@ -17,7 +18,7 @@ export const plansRouter = createTRPCRouter({
       }
 
       const planExists = await ctx.prisma.plan.findFirst({
-        where: { name: input.name, userId },
+        where: { name: input.name, tenantId },
       });
 
       if (planExists) {
@@ -32,7 +33,7 @@ export const plansRouter = createTRPCRouter({
       const createdPlan = await ctx.prisma.$transaction(async (tx) => {
         if (input.isDefault) {
           await tx.plan.updateMany({
-            where: { userId, isDefault: true },
+            where: { tenantId, isDefault: true },
             data: { isDefault: false },
           });
         }
@@ -46,6 +47,7 @@ export const plansRouter = createTRPCRouter({
             billing: input.billing,
             isDefault: input.isDefault,
             userId,
+            tenantId,
           },
         });
       });
@@ -66,6 +68,7 @@ export const plansRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) {
         throw new TRPCError({
           code: 'UNAUTHORIZED',
@@ -73,14 +76,19 @@ export const plansRouter = createTRPCRouter({
         });
       }
 
-      const where: Prisma.PlanWhereInput = input.search
-        ? {
-            name: {
-              contains: input.search,
-              mode: Prisma.QueryMode.insensitive,
-            },
-          }
-        : {};
+      /* O filtro por academia não é opcional: sem ele a lista traria os
+         planos de todas as academias do sistema. */
+      const where: Prisma.PlanWhereInput = {
+        tenantId,
+        ...(input.search
+          ? {
+              name: {
+                contains: input.search,
+                mode: Prisma.QueryMode.insensitive,
+              },
+            }
+          : {}),
+      };
 
       const [data, total] = await Promise.all([
         ctx.prisma.plan.findMany({
@@ -113,6 +121,7 @@ export const plansRouter = createTRPCRouter({
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
 
       if (!userId) {
         throw new TRPCError({
@@ -122,7 +131,7 @@ export const plansRouter = createTRPCRouter({
       }
 
       await ctx.prisma.plan.delete({
-        where: { id: input.id },
+        where: { id: input.id, tenantId },
       });
 
       return { ok: true };
@@ -132,6 +141,7 @@ export const plansRouter = createTRPCRouter({
     .input(updatePlanSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
 
       if (!userId) {
         throw new TRPCError({
@@ -145,13 +155,13 @@ export const plansRouter = createTRPCRouter({
       const updatedPlan = await ctx.prisma.$transaction(async (tx) => {
         if (rest.isDefault) {
           await tx.plan.updateMany({
-            where: { userId, isDefault: true, id: { not: id } },
+            where: { tenantId, isDefault: true, id: { not: id } },
             data: { isDefault: false },
           });
         }
 
         return tx.plan.update({
-          where: { id, userId },
+          where: { id, tenantId },
           data: {
             ...rest,
             price: parseFloat(price) / 100,
@@ -170,6 +180,7 @@ export const plansRouter = createTRPCRouter({
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
 
       if (!userId) {
         throw new TRPCError({
@@ -178,8 +189,8 @@ export const plansRouter = createTRPCRouter({
         });
       }
 
-      const plan = await ctx.prisma.plan.findUnique({
-        where: { id: input.id },
+      const plan = await ctx.prisma.plan.findFirst({
+        where: { id: input.id, tenantId },
       });
 
       if (!plan) {

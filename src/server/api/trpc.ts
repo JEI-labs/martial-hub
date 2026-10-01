@@ -124,10 +124,44 @@ export const protectedProcedure = t.procedure
     if (!ctx.session || !ctx.session.user) {
       throw new TRPCError({ code: 'UNAUTHORIZED' });
     }
+
+    const { tenantId } = ctx.session.user;
+
+    /* Dado é da academia, não de quem está logado: o recepcionista enxerga os
+       mesmos alunos que o dono. Sem tenant na sessão não há o que consultar —
+       é o caso do MASTER, que tem as rotas dele. */
+    if (!tenantId) {
+      throw new TRPCError({
+        code: 'FORBIDDEN',
+        message: 'Esta conta não pertence a nenhuma academia.',
+      });
+    }
+
     return next({
       ctx: {
         // infers the `session` as non-nullable
         session: { ...ctx.session, user: ctx.session.user },
+        tenantId,
       },
+    });
+  });
+
+/**
+ * Procedure do dono do sistema: enxerga todas as academias e não pertence a
+ * nenhuma. É o que sustenta o menu master.
+ */
+export const masterProcedure = t.procedure
+  .use(timingMiddleware)
+  .use(({ ctx, next }) => {
+    if (!ctx.session?.user) {
+      throw new TRPCError({ code: 'UNAUTHORIZED' });
+    }
+
+    if (ctx.session.user.role !== 'MASTER') {
+      throw new TRPCError({ code: 'FORBIDDEN' });
+    }
+
+    return next({
+      ctx: { session: { ...ctx.session, user: ctx.session.user } },
     });
   });

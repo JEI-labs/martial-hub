@@ -17,6 +17,7 @@ export const paymentsRouter = createTRPCRouter({
     .input(z.object({ studentId: z.string() }))
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) {
         throw new TRPCError({ code: 'UNAUTHORIZED' });
       }
@@ -25,7 +26,7 @@ export const paymentsRouter = createTRPCRouter({
         where: {
           studentId: input.studentId,
           // sem isto qualquer sessão lia as parcelas de qualquer aluno
-          student: { userId },
+          student: { tenantId },
         },
       });
 
@@ -51,12 +52,13 @@ export const paymentsRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) {
         throw new TRPCError({ code: 'UNAUTHORIZED' });
       }
 
       const student = await ctx.prisma.student.findFirst({
-        where: { id: input.studentId, userId },
+        where: { id: input.studentId, tenantId },
         select: { id: true, name: true },
       });
 
@@ -69,7 +71,7 @@ export const paymentsRouter = createTRPCRouter({
 
       const where = {
         studentId: input.studentId,
-        student: { userId },
+        student: { tenantId },
         ...(input.status === 'ALL' ? {} : { status: input.status }),
       };
 
@@ -106,6 +108,7 @@ export const paymentsRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) {
         throw new TRPCError({ code: 'UNAUTHORIZED' });
       }
@@ -131,7 +134,7 @@ export const paymentsRouter = createTRPCRouter({
         let promotion = null;
         if (input.promotionId) {
           promotion = await ctx.prisma.promotion.findFirst({
-            where: { id: input.promotionId, userId, isActive: true },
+            where: { id: input.promotionId, tenantId, isActive: true },
           });
           if (!promotion) {
             throw new TRPCError({
@@ -143,7 +146,7 @@ export const paymentsRouter = createTRPCRouter({
 
         const category = await ctx.prisma.category.findFirst({
           where: {
-            userId,
+            tenantId,
             isFixed: true,
             name: { equals: 'Alunos', mode: 'insensitive' },
           },
@@ -224,6 +227,7 @@ export const paymentsRouter = createTRPCRouter({
               status: EFinanceEntryStatus.PAID,
               currency: 'BRL',
               userId,
+              tenantId,
               categoryId: category.id,
               studentId: student.id,
             },

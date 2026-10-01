@@ -20,10 +20,11 @@ export const promotionsRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
       const where: Prisma.PromotionWhereInput = {
-        userId,
+        tenantId,
         ...(input.search?.trim()
           ? { name: { contains: input.search.trim(), mode: 'insensitive' } }
           : {}),
@@ -54,13 +55,14 @@ export const promotionsRouter = createTRPCRouter({
   /** Promoções válidas hoje, para o momento de registrar um pagamento. */
   getAvailable: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
+    const { tenantId } = ctx;
     if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
     const now = new Date();
 
     return ctx.prisma.promotion.findMany({
       where: {
-        userId,
+        tenantId,
         isActive: true,
         AND: [
           { OR: [{ startsAt: null }, { startsAt: { lte: now } }] },
@@ -75,6 +77,7 @@ export const promotionsRouter = createTRPCRouter({
     .input(createPromotionSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
       const promotion = await ctx.prisma.promotion.create({
@@ -87,6 +90,7 @@ export const promotionsRouter = createTRPCRouter({
           endsAt: input.endsAt ? new Date(input.endsAt) : null,
           isActive: input.isActive,
           userId,
+          tenantId,
         },
       });
 
@@ -97,10 +101,11 @@ export const promotionsRouter = createTRPCRouter({
     .input(updatePromotionSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
       const result = await ctx.prisma.promotion.updateMany({
-        where: { id: input.id, userId },
+        where: { id: input.id, tenantId },
         data: {
           name: input.name,
           description: input.description ?? null,
@@ -126,10 +131,11 @@ export const promotionsRouter = createTRPCRouter({
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
       const result = await ctx.prisma.promotion.deleteMany({
-        where: { id: input.id, userId },
+        where: { id: input.id, tenantId },
       });
 
       if (result.count === 0) {

@@ -13,7 +13,7 @@ import {
   sendWhatsappMessage,
 } from '@/server/whatsapp/client';
 import { MAX_CONNECTIONS_PER_USER } from '@/common/constants/whatsapp';
-import { runAutomationsForUser } from '@/server/whatsapp/automations';
+import { runAutomationsForTenant } from '@/server/whatsapp/automations';
 import {
   connectInstance,
   connectionState,
@@ -51,10 +51,11 @@ export const whatsappRouter = createTRPCRouter({
    */
   getConfig: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
+    const { tenantId } = ctx;
     if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
     const config = await ctx.prisma.whatsappConfig.findFirst({
-      where: { userId, isActive: true },
+      where: { tenantId, isActive: true },
       select: {
         id: true,
         label: true,
@@ -80,10 +81,11 @@ export const whatsappRouter = createTRPCRouter({
    */
   listConnections: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
+    const { tenantId } = ctx;
     if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
     const rows = await ctx.prisma.whatsappConfig.findMany({
-      where: { userId },
+      where: { tenantId },
       orderBy: [{ isActive: 'desc' }, { createdAt: 'asc' }],
       select: {
         id: true,
@@ -122,6 +124,7 @@ export const whatsappRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
       if (!managedEvolutionEnabled()) {
@@ -134,7 +137,7 @@ export const whatsappRouter = createTRPCRouter({
       /* A primeira já entra ativa: senão o dono conecta o número e nada
          envia, sem pista do porquê. */
       const total = await ctx.prisma.whatsappConfig.count({
-        where: { userId },
+        where: { tenantId },
       });
 
       if (total >= MAX_CONNECTIONS_PER_USER) {
@@ -157,6 +160,7 @@ export const whatsappRouter = createTRPCRouter({
           senderNumber: input.senderNumber,
           isActive: total === 0,
           userId,
+          tenantId,
         },
         select: { id: true },
       });
@@ -193,10 +197,11 @@ export const whatsappRouter = createTRPCRouter({
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
       const row = await ctx.prisma.whatsappConfig.findFirst({
-        where: { id: input.id, userId },
+        where: { id: input.id, tenantId },
         select: { instanceId: true, provider: true, baseUrl: true },
       });
       if (!row?.instanceId || !isManaged(row.provider, row.baseUrl)) {
@@ -218,10 +223,11 @@ export const whatsappRouter = createTRPCRouter({
     .input(z.object({ id: z.string() }))
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
       const row = await ctx.prisma.whatsappConfig.findFirst({
-        where: { id: input.id, userId },
+        where: { id: input.id, tenantId },
         select: {
           id: true,
           instanceId: true,
@@ -255,10 +261,11 @@ export const whatsappRouter = createTRPCRouter({
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
       const connection = await ctx.prisma.whatsappConfig.findFirst({
-        where: { id: input.id, userId },
+        where: { id: input.id, tenantId },
         select: { id: true },
       });
       if (!connection) {
@@ -270,7 +277,7 @@ export const whatsappRouter = createTRPCRouter({
 
       await ctx.prisma.$transaction([
         ctx.prisma.whatsappConfig.updateMany({
-          where: { userId },
+          where: { tenantId },
           data: { isActive: false },
         }),
         ctx.prisma.whatsappConfig.update({
@@ -287,10 +294,11 @@ export const whatsappRouter = createTRPCRouter({
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
       const row = await ctx.prisma.whatsappConfig.findFirst({
-        where: { id: input.id, userId },
+        where: { id: input.id, tenantId },
         select: { id: true, instanceId: true, provider: true, baseUrl: true },
       });
       if (!row) {
@@ -311,10 +319,11 @@ export const whatsappRouter = createTRPCRouter({
 
   listTemplates: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
+    const { tenantId } = ctx;
     if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
     return ctx.prisma.messageTemplate.findMany({
-      where: { userId },
+      where: { tenantId },
       orderBy: [{ event: 'asc' }, { createdAt: 'asc' }],
     });
   }),
@@ -333,11 +342,12 @@ export const whatsappRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
       if (input.id) {
         const result = await ctx.prisma.messageTemplate.updateMany({
-          where: { id: input.id, userId },
+          where: { id: input.id, tenantId },
           data: {
             event: input.event,
             name: input.name,
@@ -365,6 +375,7 @@ export const whatsappRouter = createTRPCRouter({
           providerLanguage: input.providerLanguage || 'pt_BR',
           isActive: input.isActive,
           userId,
+          tenantId,
         },
       });
 
@@ -375,10 +386,11 @@ export const whatsappRouter = createTRPCRouter({
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
       const result = await ctx.prisma.messageTemplate.deleteMany({
-        where: { id: input.id, userId },
+        where: { id: input.id, tenantId },
       });
       if (result.count === 0) {
         throw new TRPCError({
@@ -397,12 +409,13 @@ export const whatsappRouter = createTRPCRouter({
    */
   listAutomations: protectedProcedure.query(async ({ ctx }) => {
     const userId = ctx.session.user.id;
+    const { tenantId } = ctx;
     if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
     const [saved, templates] = await Promise.all([
-      ctx.prisma.messageAutomation.findMany({ where: { userId } }),
+      ctx.prisma.messageAutomation.findMany({ where: { tenantId } }),
       ctx.prisma.messageTemplate.findMany({
-        where: { userId, isActive: true },
+        where: { tenantId, isActive: true },
         select: { id: true, name: true, event: true },
         orderBy: { name: 'asc' },
       }),
@@ -439,6 +452,7 @@ export const whatsappRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
       if (input.isActive && !input.templateId) {
@@ -450,7 +464,7 @@ export const whatsappRouter = createTRPCRouter({
 
       if (input.templateId) {
         const template = await ctx.prisma.messageTemplate.findFirst({
-          where: { id: input.templateId, userId, event: input.event },
+          where: { id: input.templateId, tenantId, event: input.event },
           select: { id: true },
         });
         if (!template) {
@@ -469,8 +483,8 @@ export const whatsappRouter = createTRPCRouter({
       };
 
       await ctx.prisma.messageAutomation.upsert({
-        where: { userId_event: { userId, event: input.event } },
-        create: { ...data, event: input.event, userId },
+        where: { tenantId_event: { tenantId, event: input.event } },
+        create: { ...data, event: input.event, tenantId, userId },
         update: data,
       });
 
@@ -480,9 +494,10 @@ export const whatsappRouter = createTRPCRouter({
   /** Roda a rotina agora, para conferir sem esperar o horário. */
   runAutomationsNow: protectedProcedure.mutation(async ({ ctx }) => {
     const userId = ctx.session.user.id;
+    const { tenantId } = ctx;
     if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
-    return runAutomationsForUser(userId);
+    return runAutomationsForTenant(tenantId);
   }),
 
   /** Histórico de envios, do mais recente para o mais antigo. */
@@ -499,10 +514,11 @@ export const whatsappRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
       const where = {
-        userId,
+        tenantId,
         ...(input.event ? { event: input.event } : {}),
         ...(input.status ? { status: input.status } : {}),
       };
@@ -517,7 +533,7 @@ export const whatsappRouter = createTRPCRouter({
         }),
         ctx.prisma.messageLog.count({ where }),
         ctx.prisma.messageLog.count({
-          where: { userId, status: EMessageStatus.FAILED },
+          where: { tenantId, status: EMessageStatus.FAILED },
         }),
       ]);
 
@@ -545,19 +561,20 @@ export const whatsappRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED' });
 
       const [config, student, template] = await Promise.all([
         ctx.prisma.whatsappConfig.findFirst({
-          where: { userId, isActive: true },
+          where: { tenantId, isActive: true },
         }),
         ctx.prisma.student.findFirst({
-          where: { id: input.studentId, userId },
+          where: { id: input.studentId, tenantId },
           select: { id: true, name: true, phone: true },
         }),
         input.templateId
           ? ctx.prisma.messageTemplate.findFirst({
-              where: { id: input.templateId, userId },
+              where: { id: input.templateId, tenantId },
             })
           : Promise.resolve(null),
       ]);
@@ -606,6 +623,7 @@ export const whatsappRouter = createTRPCRouter({
           studentId: student.id,
           templateId: input.templateId ?? null,
           userId,
+          tenantId,
         },
       });
 

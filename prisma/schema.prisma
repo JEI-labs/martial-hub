@@ -6,6 +6,31 @@ datasource db {
   provider = "postgresql"
 }
 
+/// Situação da academia como cliente do sistema.
+enum ETenantStatus {
+  TRIAL
+  ACTIVE
+  /// Sem acesso: inadimplente ou desligada.
+  SUSPENDED
+  CANCELED
+}
+
+/// O que cada pessoa pode fazer. MASTER é o dono do sistema e não pertence a
+/// nenhuma academia.
+enum EUserRole {
+  MASTER
+  OWNER
+  STAFF
+  TEACHER
+}
+
+enum ETenantInvoiceStatus {
+  OPEN
+  PAID
+  OVERDUE
+  CANCELED
+}
+
 enum PaymentStatus {
   PENDING
   PAID
@@ -54,13 +79,122 @@ enum ECategoryStatus {
   INACTIVE
 }
 
-model User {
-  id        String   @id @default(uuid())
+/// Uma academia. Tudo que o sistema guarda pertence a uma, e é por aqui que
+/// os dados de uma não encostam nos da outra.
+model Tenant {
+  id        String        @id @default(uuid())
+  /// Nome como a academia se chama, usado no sistema e nas telas do master.
   name      String
-  email     String   @unique
+  /// Vira o subdomínio: "thaiboxe" -> thaiboxe.seusistema.com.br
+  slug      String        @unique
+  status    ETenantStatus @default(TRIAL)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  users    User[]
+  domains  TenantDomain[]
+  branding TenantBranding?
+
+  subscription TenantSubscription?
+  invoices     TenantInvoice[]
+
+  students           Student[]
+  plans              Plan[]
+  categories         Category[]
+  suppliers          Supplier[]
+  financeEntries     FinanceEntry[]
+  promotions         Promotion[]
+  whatsappConfigs    WhatsappConfig[]
+  messageTemplates   MessageTemplate[]
+  messageAutomations MessageAutomation[]
+  messageLogs        MessageLog[]
+
+  @@index([status])
+}
+
+/// Endereços que levam a esta academia: o subdomínio que o sistema cria e os
+/// domínios próprios que o cliente aponta. A resolução do tenant é pelo host,
+/// então o login já sabe de quem é a casa antes de alguém digitar a senha.
+model TenantDomain {
+  id         String    @id @default(uuid())
+  hostname   String    @unique
+  /// O que aparece nos links que o sistema gera.
+  isPrimary  Boolean   @default(false)
+  /// Subdomínio nosso não precisa de verificação; domínio próprio precisa.
+  verifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+/// A cara do sistema para esta academia.
+model TenantBranding {
+  id            String   @id @default(uuid())
+  logoUrl       String?
+  loginImageUrl String?
+  /// Cor principal em HSL sem a função: "9 60% 50%" — é o formato que os
+  /// tokens do tema usam, então entra direto como variável CSS.
+  primaryColor  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenantId String @unique
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+/// O que a academia paga pelo sistema. Uma por tenant.
+model TenantSubscription {
+  id         String    @id @default(uuid())
+  /// Em centavos, como todo dinheiro do sistema fora de Payment.
+  priceCents Int
+  /// Dia do mês em que a fatura vence.
+  billingDay Int       @default(10)
+  startedAt  DateTime  @default(now())
+  canceledAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  tenantId String @unique
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+/// Fatura da academia para o dono do sistema.
+model TenantInvoice {
+  id          String               @id @default(uuid())
+  amountCents Int
+  dueDate     DateTime
+  paidAt      DateTime?
+  status      ETenantInvoiceStatus @default(OPEN)
+  notes       String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([dueDate])
+}
+
+model User {
+  id        String    @id @default(uuid())
+  name      String
+  /// Único dentro da academia, não no sistema inteiro: a mesma pessoa pode
+  /// ter conta em duas academias, e o login resolve pelo host.
+  email     String
   password  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  role      EUserRole @default(OWNER)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  /// Nulo só para o MASTER, que é o dono do sistema e não pertence a academia
+  /// nenhuma.
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   FinanceEntry FinanceEntry[]
   Category     Category[]
@@ -73,12 +207,15 @@ model User {
   messageTemplates   MessageTemplate[]
   messageLogs        MessageLog[]
   messageAutomations MessageAutomation[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
 }
 
 model Student {
   id         String       @id @default(uuid())
   name       String
-  email      String       @unique
+  email      String
   phone      String
   avatar     String?
   birthDate  DateTime?
@@ -91,14 +228,25 @@ model Student {
   payments    Payment[]
   messageLogs MessageLog[]
 
-  userId       String
-  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Dono do dado é a academia; isto aqui é só quem cadastrou.
+
+  userId String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tenantId String
+
+  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   FinanceEntry FinanceEntry[]
+
+  /// O mesmo e-mail pode treinar em duas academias; dentro de uma, não.
+  @@unique([tenantId, email])
+  @@index([tenantId])
 }
 
 model Plan {
   id          String       @id @default(uuid())
-  name        String       @unique
+  name        String
   description String?
   /// Valor fechado do período inteiro, não da parcela: um trimestral de
   /// R$ 350,50 custa isso pelos três meses.
@@ -114,10 +262,20 @@ model Plan {
 
   enrollments Enrollment[]
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Dono do dado é a academia; isto aqui é só quem cadastrou.
 
-  @@index([userId, isDefault])
+  userId String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tenantId String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// Dois planos com o mesmo nome na mesma academia confundiriam quem
+  /// matricula; em academias diferentes, não há conflito.
+  @@unique([tenantId, name])
+  @@index([tenantId, isDefault])
 }
 
 model Enrollment {
@@ -181,8 +339,15 @@ model FinanceEntry {
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Dono do dado é a academia; isto aqui é só quem cadastrou.
+
+  userId String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tenantId String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   studentId String?
   student   Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
@@ -190,8 +355,8 @@ model FinanceEntry {
   categoryId String
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
-  @@index([userId, date])
-  @@index([userId, status])
+  @@index([tenantId, date])
+  @@index([tenantId, status])
 }
 
 model Category {
@@ -206,8 +371,17 @@ model Category {
   Expense      Expense[]
   FinanceEntry FinanceEntry[]
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Dono do dado é a academia; isto aqui é só quem cadastrou.
+
+  userId String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tenantId String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
 }
 
 model Supplier {
@@ -221,10 +395,19 @@ model Supplier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Dono do dado é a academia; isto aqui é só quem cadastrou.
+
+  userId String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tenantId String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   expenses Expense[]
+
+  @@index([tenantId])
 }
 
 /// Como o plano é cobrado.
@@ -277,10 +460,17 @@ model Promotion {
 
   payments Payment[]
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Dono do dado é a academia; isto aqui é só quem cadastrou.
 
-  @@index([userId, isActive])
+  userId String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tenantId String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, isActive])
 }
 
 /// Credenciais do provedor de WhatsApp. O usuário pode cadastrar várias
@@ -299,10 +489,17 @@ model WhatsappConfig {
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Dono do dado é a academia; isto aqui é só quem cadastrou.
 
-  @@index([userId, isActive])
+  userId String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tenantId String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, isActive])
 }
 
 /// Texto por tipo de evento, com placeholders tipo {{aluno}}.
@@ -321,13 +518,20 @@ model MessageTemplate {
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Dono do dado é a academia; isto aqui é só quem cadastrou.
+
+  userId String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tenantId String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   logs        MessageLog[]
   automations MessageAutomation[]
 
-  @@index([userId, event])
+  @@index([tenantId, event])
 }
 
 /// Regra de envio automático por evento. Uma por evento e por usuário.
@@ -347,10 +551,17 @@ model MessageAutomation {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Dono do dado é a academia; isto aqui é só quem cadastrou.
 
-  @@unique([userId, event])
+  userId String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tenantId String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, event])
 }
 
 /// Histórico de envios, para não repetir disparo e para auditoria.
@@ -369,9 +580,16 @@ model MessageLog {
   templateId String?
   template   MessageTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Dono do dado é a academia; isto aqui é só quem cadastrou.
 
-  @@index([userId, createdAt])
+  userId String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tenantId String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
   @@index([studentId, event, createdAt])
 }

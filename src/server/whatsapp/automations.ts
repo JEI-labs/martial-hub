@@ -3,6 +3,7 @@ import 'server-only';
 import {
   EMessageEvent,
   EMessageStatus,
+  ETenantStatus,
   PaymentStatus,
   type MessageTemplate,
   type WhatsappConfig,
@@ -74,7 +75,7 @@ interface Target {
 
 /** Quem se encaixa na regra hoje. */
 async function findTargets(
-  userId: string,
+  tenantId: string,
   event: EMessageEvent,
   offsetDays: number,
   now: Date,
@@ -83,7 +84,7 @@ async function findTargets(
 
   if (event === EMessageEvent.BIRTHDAY) {
     const students = await prisma.student.findMany({
-      where: { userId, birthDate: { not: null } },
+      where: { tenantId, birthDate: { not: null } },
       select: { id: true, name: true, phone: true, birthDate: true },
     });
     return students
@@ -114,7 +115,7 @@ async function findTargets(
     where: {
       status: PaymentStatus.PENDING,
       dueDate: range,
-      student: { userId },
+      student: { tenantId },
     },
     select: {
       student: { select: { id: true, name: true, phone: true } },
@@ -134,14 +135,14 @@ async function findTargets(
 }
 
 async function alreadySentToday(
-  userId: string,
+  tenantId: string,
   studentId: string,
   event: EMessageEvent,
   now: Date,
 ): Promise<boolean> {
   const existing = await prisma.messageLog.findFirst({
     where: {
-      userId,
+      tenantId,
       studentId,
       event,
       status: EMessageStatus.SENT,
@@ -157,7 +158,7 @@ async function deliver(
   template: MessageTemplate,
   target: Target,
   event: EMessageEvent,
-  userId: string,
+  tenantId: string,
 ) {
   const values = {
     aluno: target.name,
@@ -184,15 +185,15 @@ async function deliver(
       toNumber: target.phone,
       studentId: target.studentId,
       templateId: template.id,
-      userId,
+      tenantId,
     },
   });
 
   return result;
 }
 
-export async function runAutomationsForUser(
-  userId: string,
+export async function runAutomationsForTenant(
+  tenantId: string,
   now: Date = new Date(),
 ): Promise<AutomationReport> {
   const report: AutomationReport = {
@@ -203,7 +204,7 @@ export async function runAutomationsForUser(
   };
 
   const config = await prisma.whatsappConfig.findFirst({
-    where: { userId, isActive: true },
+    where: { tenantId, isActive: true },
   });
   if (!config) {
     report.skipped.push('nenhuma conexão de WhatsApp ativa');
@@ -211,7 +212,7 @@ export async function runAutomationsForUser(
   }
 
   const automations = await prisma.messageAutomation.findMany({
-    where: { userId, isActive: true },
+    where: { tenantId, isActive: true },
     include: { template: true },
   });
   if (automations.length === 0) {
@@ -234,7 +235,7 @@ export async function runAutomationsForUser(
     }
 
     const targets = await findTargets(
-      userId,
+      tenantId,
       automation.event,
       automation.offsetDays,
       now,
@@ -250,7 +251,12 @@ export async function runAutomationsForUser(
 
       if (!target.phone) continue;
       if (
-        await alreadySentToday(userId, target.studentId, automation.event, now)
+        await alreadySentToday(
+          tenantId,
+          target.studentId,
+          automation.event,
+          now,
+        )
       ) {
         continue;
       }
@@ -260,7 +266,7 @@ export async function runAutomationsForUser(
         automation.template,
         target,
         automation.event,
-        userId,
+        tenantId,
       );
 
       if (result.ok) report.sent += 1;
@@ -280,19 +286,31 @@ export async function runAutomationsForUser(
   return report;
 }
 
-/** Todas as academias, para a chamada do cron. */
+/**
+ * Todas as academias, para a chamada do cron.
+ *
+ * Academia suspensa não dispara: quem está sem acesso ao sistema não pode
+ * continuar mandando mensagem em nome dele. Uma de cada vez, de propósito —
+ * em paralelo, dez academias viram dez rajadas simultâneas no mesmo servidor
+ * de WhatsApp, que é justamente o que faz número ser bloqueado.
+ */
 export async function runAutomationsForEveryone(now: Date = new Date()) {
-  const users = await prisma.user.findMany({
-    where: { whatsappConfigs: { some: { isActive: true } } },
-    select: { id: true },
+  const tenants = await prisma.tenant.findMany({
+    where: {
+      status: { in: [ETenantStatus.ACTIVE, ETenantStatus.TRIAL] },
+      whatsappConfigs: { some: { isActive: true } },
+    },
+    select: { id: true, name: true },
   });
 
-  const reports = await Promise.all(
-    users.map(async (user) => ({
-      userId: user.id,
-      ...(await runAutomationsForUser(user.id, now)),
-    })),
-  );
+  const reports = [];
+  for (const tenant of tenants) {
+    reports.push({
+      tenantId: tenant.id,
+      tenant: tenant.name,
+      ...(await runAutomationsForTenant(tenant.id, now)),
+    });
+  }
 
   return reports;
 }

@@ -104,6 +104,7 @@ export const dashboardRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) {
         throw new TRPCError({
           code: 'UNAUTHORIZED',
@@ -128,7 +129,7 @@ export const dashboardRouter = createTRPCRouter({
         const [students, financeEntries, categories, messageLogs] =
           await Promise.all([
             ctx.prisma.student.findMany({
-              where: { userId },
+              where: { tenantId },
               include: {
                 enrollments: {
                   include: { plan: true },
@@ -142,7 +143,7 @@ export const dashboardRouter = createTRPCRouter({
                  o filtro num período antigo — então a busca desce até o
                  primeiro dos dois, senão "Resultado do mês" viria cortado. */
               where: {
-                userId,
+                tenantId,
                 ...(fetchStart ? { date: { gte: fetchStart } } : {}),
               },
               select: {
@@ -155,11 +156,11 @@ export const dashboardRouter = createTRPCRouter({
               },
             }),
             ctx.prisma.category.findMany({
-              where: { userId },
+              where: { tenantId },
               select: { id: true, name: true },
             }),
             ctx.prisma.messageLog.findMany({
-              where: { userId, createdAt: { gte: subMonths(now, 1) } },
+              where: { tenantId, createdAt: { gte: subMonths(now, 1) } },
               select: { status: true, event: true },
             }),
           ]);

@@ -36,6 +36,7 @@ export const financeRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) {
         throw new TRPCError({
           code: 'UNAUTHORIZED',
@@ -46,7 +47,7 @@ export const financeRouter = createTRPCRouter({
       const { page, limit, search, type, from, to, status } = input;
       const skip = (page - 1) * limit;
 
-      const where: Prisma.FinanceEntryWhereInput = { userId };
+      const where: Prisma.FinanceEntryWhereInput = { tenantId };
       if (type) where.type = whereType(type);
       if (status) where.status = { in: status };
       if (search) {
@@ -103,6 +104,7 @@ export const financeRouter = createTRPCRouter({
     .input(createFinanceEntrySchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) {
         throw new TRPCError({
           code: 'UNAUTHORIZED',
@@ -116,6 +118,7 @@ export const financeRouter = createTRPCRouter({
         const entry = await ctx.prisma.financeEntry.create({
           data: {
             userId,
+            tenantId,
             date: dateObj,
             amount: Number(input.amount),
             type: input.type,
@@ -142,6 +145,7 @@ export const financeRouter = createTRPCRouter({
     .input(z.object({ id: z.string() }).merge(createFinanceEntrySchema))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
 
       if (!userId) {
         throw new TRPCError({
@@ -150,10 +154,10 @@ export const financeRouter = createTRPCRouter({
         });
       }
 
-      const existing = await ctx.prisma.financeEntry.findUnique({
-        where: { id: input.id },
+      const existing = await ctx.prisma.financeEntry.findFirst({
+        where: { id: input.id, tenantId },
       });
-      if (!existing || existing.userId !== userId) {
+      if (!existing) {
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Lançamento não encontrado',
@@ -162,7 +166,7 @@ export const financeRouter = createTRPCRouter({
 
       const dateObj = convertToDate(input.date);
       const updated = await ctx.prisma.financeEntry.update({
-        where: { id: input.id },
+        where: { id: input.id, tenantId },
         data: {
           date: dateObj,
           amount: Number(input.amount),
@@ -186,6 +190,7 @@ export const financeRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) {
         throw new TRPCError({
           code: 'UNAUTHORIZED',
@@ -193,10 +198,10 @@ export const financeRouter = createTRPCRouter({
         });
       }
 
-      const existing = await ctx.prisma.financeEntry.findUnique({
-        where: { id: input.id },
+      const existing = await ctx.prisma.financeEntry.findFirst({
+        where: { id: input.id, tenantId },
       });
-      if (!existing || existing.userId !== userId) {
+      if (!existing) {
         throw new TRPCError({
           code: 'NOT_FOUND',
           message: 'Lançamento não encontrado',
@@ -204,7 +209,7 @@ export const financeRouter = createTRPCRouter({
       }
 
       await ctx.prisma.financeEntry.delete({
-        where: { id: input.id },
+        where: { id: input.id, tenantId },
       });
 
       return { ok: true };
@@ -221,6 +226,7 @@ export const financeRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) {
         throw new TRPCError({
           code: 'UNAUTHORIZED',
@@ -230,7 +236,7 @@ export const financeRouter = createTRPCRouter({
 
       const { from, to, type, status } = input;
 
-      const where: Prisma.FinanceEntryWhereInput = { userId };
+      const where: Prisma.FinanceEntryWhereInput = { tenantId };
       if (type) where.type = whereType(type);
       if (status) where.status = { in: status };
       if (from || to) {
