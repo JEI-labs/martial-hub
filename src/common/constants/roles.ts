@@ -22,7 +22,7 @@ export const ROLE_INFO: Record<
   [EUserRole.TEACHER]: {
     label: 'Professor',
     description:
-      'Vê os alunos e registra graduação. Não entra no financeiro nem nos cadastros.',
+      'Vê os alunos, registra graduação e cuida da agenda dele. Não entra no financeiro nem nos cadastros.',
   },
 };
 

@@ -1,14 +1,12 @@
 'use client';
 
-import { Palette, Receipt, Users } from 'lucide-react';
+import { Palette, Receipt } from 'lucide-react';
 
 import { BreadcrumbUpdater } from '@/contexts/breadcrumb';
 import { PageIntro } from '@/components/pageIntro/pageIntro.component';
 import { BrandingForm } from '@/components/tenant/brandingForm.component';
-import { TeamCard } from '@/components/tenant/teamCard.component';
 import { BillingCard } from '@/components/tenant/billingCard.component';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useSession } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 
 const breadcrumbItems = [
@@ -17,7 +15,6 @@ const breadcrumbItems = [
 ];
 
 export default function ConfiguracoesPage() {
-  const { data: session } = useSession();
   /* A tarja de cobrança aponta para cá com ?aba=assinatura. */
   const abaInicial = useSearchParams().get('aba') ?? 'aparencia';
 
@@ -54,10 +51,6 @@ export default function ConfiguracoesPage() {
               <Palette className="size-4" aria-hidden />
               Aparência
             </TabsTrigger>
-            <TabsTrigger value="equipe" className="gap-2">
-              <Users className="size-4" aria-hidden />
-              Equipe
-            </TabsTrigger>
             <TabsTrigger value="assinatura" className="gap-2">
               <Receipt className="size-4" aria-hidden />
               Assinatura
@@ -66,10 +59,6 @@ export default function ConfiguracoesPage() {
 
           <TabsContent value="aparencia" className="mt-4">
             <BrandingForm />
-          </TabsContent>
-
-          <TabsContent value="equipe" className="mt-4">
-            <TeamCard currentUserId={session?.user.id ?? ''} />
           </TabsContent>
 
           <TabsContent value="assinatura" className="mt-4">

@@ -13,6 +13,7 @@ import {
   Plug,
   ReceiptCentIcon,
   Tag,
+  Users,
   UserSquare,
 } from 'lucide-react';
 
@@ -40,6 +41,7 @@ const SECTIONS = {
       href: '/cadastros/fornecedores',
       icon: UserSquare,
     },
+    { label: 'Equipe', href: '/cadastros/equipe', icon: Users },
   ],
   whatsapp: [
     { label: 'Modelos', href: '/whatsapp/modelos', icon: MessageSquareText },
