@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import {
   conferirCodigo,
+  exigeDoisFatores,
   recomendaDoisFatores,
   gerarCodigosDeRecuperacao,
   gerarQrCode,
@@ -28,6 +29,7 @@ export const securityRouter = createTRPCRouter({
     return {
       ativo: Boolean(user.twoFactorEnabledAt),
       desde: user.twoFactorEnabledAt,
+      obrigatorio: exigeDoisFatores(user.role),
       recomendado: recomendaDoisFatores(user.role),
       codigosRestantes: user.twoFactorRecoveryCodes.length,
     };
@@ -144,6 +146,16 @@ export const securityRouter = createTRPCRouter({
         where: { id: ctx.session.user.id },
         select: { role: true, twoFactorSecret: true },
       });
+
+      /* Conta de master não desliga: ela é a única do sistema onde a segunda
+         etapa é condição de uso, e não escolha. */
+      if (exigeDoisFatores(user.role)) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message:
+            'A verificação em duas etapas é obrigatória para contas master.',
+        });
+      }
 
       if (
         !user.twoFactorSecret ||

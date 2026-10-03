@@ -119,6 +119,8 @@ export function TwoFactorCard() {
             Verificação em duas etapas
             {ativo ? (
               <Badge variant="success">Ativa</Badge>
+            ) : status.obrigatorio ? (
+              <Badge variant="destructive">Obrigatória</Badge>
             ) : status.recomendado ? (
               <Badge variant="alert">Recomendada</Badge>
             ) : (
@@ -128,6 +130,8 @@ export function TwoFactorCard() {
           <CardDescription>
             Além da senha, o sistema pede um código de seis dígitos que muda a
             cada 30 segundos no seu celular.
+            {status.obrigatorio &&
+              ' Para conta de dono do sistema ela é obrigatória: é a conta que abre todas as academias de uma vez.'}
             {status.recomendado &&
               ' O seu acesso abre os dados de todo mundo — alunos, pagamentos, dinheiro. Se a sua senha vazar, é esta etapa que impede o estrago.'}
           </CardDescription>
@@ -137,9 +141,11 @@ export function TwoFactorCard() {
           className={
             ativo
               ? 'text-green-600'
-              : status.recomendado
-                ? 'text-alert'
-                : 'text-muted-foreground'
+              : status.obrigatorio
+                ? 'text-destructive-text'
+                : status.recomendado
+                  ? 'text-alert'
+                  : 'text-muted-foreground'
           }
         >
           {ativo ? (
@@ -304,50 +310,55 @@ export function TwoFactorCard() {
               Os códigos antigos param de valer assim que os novos aparecem.
             </p>
 
-            {/* Desligar existe porque a etapa é uma escolha. Pede o código
+            {/* Desligar existe porque a etapa é uma escolha — e para a conta
+                master ela não é, então o botão nem aparece. Pede o código
                 atual: se bastasse estar logado, uma sessão esquecida aberta
                 derrubaria justamente a proteção contra sessão esquecida. */}
-            <div className="border-border mt-2 flex flex-col gap-2 border-t pt-4">
-              <Label htmlFor="codigo-desligar">
-                Desligar a verificação em duas etapas
-              </Label>
+            {!status.obrigatorio && (
+              <div className="border-border mt-2 flex flex-col gap-2 border-t pt-4">
+                <Label htmlFor="codigo-desligar">
+                  Desligar a verificação em duas etapas
+                </Label>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <Input
-                  id="codigo-desligar"
-                  inputMode="numeric"
-                  maxLength={6}
-                  placeholder="código atual"
-                  className="w-40 text-center tracking-widest"
-                  value={codigoParaDesligar}
-                  onChange={(event) =>
-                    setCodigoParaDesligar(event.target.value.replace(/\D/g, ''))
-                  }
-                />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    id="codigo-desligar"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="código atual"
+                    className="w-40 text-center tracking-widest"
+                    value={codigoParaDesligar}
+                    onChange={(event) =>
+                      setCodigoParaDesligar(
+                        event.target.value.replace(/\D/g, ''),
+                      )
+                    }
+                  />
 
-                <Button
-                  variant="ghost"
-                  className="text-destructive-text"
-                  disabled={
-                    codigoParaDesligar.length !== 6 || desligar.isPending
-                  }
-                  onClick={() =>
-                    desligar.mutate({ codigo: codigoParaDesligar })
-                  }
-                >
-                  {desligar.isPending && (
-                    <Loader2 className="mr-2 size-4 animate-spin" />
-                  )}
-                  Desligar
-                </Button>
+                  <Button
+                    variant="ghost"
+                    className="text-destructive-text"
+                    disabled={
+                      codigoParaDesligar.length !== 6 || desligar.isPending
+                    }
+                    onClick={() =>
+                      desligar.mutate({ codigo: codigoParaDesligar })
+                    }
+                  >
+                    {desligar.isPending && (
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                    )}
+                    Desligar
+                  </Button>
+                </div>
+
+                <p className="text-muted-foreground text-xs">
+                  {status.recomendado
+                    ? 'A sua conta abre os dados de todo mundo. Desligando, só a senha separa alguém de tudo isso.'
+                    : 'A entrada volta a pedir só a senha.'}
+                </p>
               </div>
-
-              <p className="text-muted-foreground text-xs">
-                {status.recomendado
-                  ? 'A sua conta abre os dados de todo mundo. Desligando, só a senha separa alguém de tudo isso.'
-                  : 'A entrada volta a pedir só a senha.'}
-              </p>
-            </div>
+            )}
           </div>
         )}
       </CardContent>

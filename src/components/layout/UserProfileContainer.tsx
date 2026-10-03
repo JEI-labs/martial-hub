@@ -69,6 +69,10 @@ export function UserProfileContainer(): React.JSX.Element {
                 <Badge variant="success" className="ml-auto">
                   Ativa
                 </Badge>
+              ) : seguranca.obrigatorio ? (
+                <Badge variant="destructive" className="ml-auto">
+                  Pendente
+                </Badge>
               ) : seguranca.recomendado ? (
                 <Badge variant="alert" className="ml-auto">
                   Recomendado

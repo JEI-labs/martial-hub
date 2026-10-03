@@ -2,6 +2,8 @@ import { EUserRole } from '@prisma/client';
 import { redirect } from 'next/navigation';
 
 import { NOME_DO_SISTEMA } from '@/common/constants/sistema';
+import { exigeDoisFatores, temDoisFatores } from '@/server/auth/twoFactor';
+import { TwoFactorRequired } from '@/components/security/twoFactorRequired.component';
 import { getServerAuthSession } from '@/server/auth';
 import { getCurrentTenant, masterHost } from '@/server/tenant/resolve';
 import { ThemeToggler } from '@/components/theme/theme-toggler';
@@ -29,6 +31,17 @@ export default async function MasterLayout({
   if (tenant) {
     const casa = masterHost();
     redirect(casa ? `https://${casa}/master` : '/painel');
+  }
+
+  /* O dono do sistema enxerga todas as academias; sem segunda etapa, uma
+     senha vazada entregaria todas de uma vez. É a única parede que sobrou no
+     sistema, e é aqui que ela faz sentido: são poucas contas, todas internas,
+     e nenhuma delas está conhecendo o produto pela primeira vez. */
+  if (
+    exigeDoisFatores(session.user.role) &&
+    !(await temDoisFatores(session.user.id))
+  ) {
+    return <TwoFactorRequired nome={session.user.name} destino="/master" />;
   }
 
   return (

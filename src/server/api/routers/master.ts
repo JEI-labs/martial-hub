@@ -536,11 +536,12 @@ export const masterRouter = createTRPCRouter({
     return masters.map(({ twoFactorEnabledAt, ...master }) => ({
       ...master,
       souEu: master.id === ctx.session.user.id,
-      /* Para master a segunda etapa é sempre recomendada — a conta abre
-         todas as academias —, então "opcional" não existe aqui. */
+      /* Para master a segunda etapa é obrigatória, então aqui só existem dois
+         estados — e "pendente" quer dizer que a pessoa está parada na parede,
+         sem conseguir usar o painel. */
       doisFatores: twoFactorEnabledAt
         ? ('ativo' as const)
-        : ('recomendado' as const),
+        : ('pendente' as const),
       doisFatoresDesde: twoFactorEnabledAt,
     }));
   }),
