@@ -11,14 +11,17 @@ import { montarUri } from './totp';
 export { conferirCodigo, gerarSegredo } from './totp';
 
 /**
- * Quem é obrigado a ter verificação em duas etapas.
+ * Para quem a verificação em duas etapas é fortemente recomendada.
  *
  * Dono de academia e dono do sistema: são as contas que abrem o dado de todo
- * mundo — alunos, dinheiro, e no caso do master, de todas as academias. Para
- * recepção e professor fica opcional; exigir de quem só registra pagamento
- * cria atrito sem reduzir risco na mesma proporção.
+ * mundo — alunos, dinheiro, e no caso do master, de todas as academias.
+ *
+ * Recomendada, e não exigida: trancar a porta de quem ainda não configurou
+ * transformava o primeiro acesso numa parede, e quem chega para conhecer o
+ * sistema desiste antes de ver o sistema. O lugar de insistir é a tela de
+ * segurança, onde dá para explicar o porquê.
  */
-export function exigeDoisFatores(papel: EUserRole): boolean {
+export function recomendaDoisFatores(papel: EUserRole): boolean {
   return papel === EUserRole.OWNER || papel === EUserRole.MASTER;
 }
 

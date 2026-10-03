@@ -23,7 +23,7 @@ import {
   nomeNaZona,
   removerSubdominio,
 } from '@/server/dns/hostinger';
-import { exigeDoisFatores } from '@/server/auth/twoFactor';
+import { recomendaDoisFatores } from '@/server/auth/twoFactor';
 import { criarBilheteDeSuporte } from '@/server/support/handoff';
 import {
   DIAS_DE_AVISO,
@@ -290,8 +290,8 @@ export const masterRouter = createTRPCRouter({
           ...usuario,
           doisFatores: twoFactorEnabledAt
             ? ('ativo' as const)
-            : exigeDoisFatores(usuario.role)
-              ? ('pendente' as const)
+            : recomendaDoisFatores(usuario.role)
+              ? ('recomendado' as const)
               : ('opcional' as const),
           doisFatoresDesde: twoFactorEnabledAt,
         })),
@@ -536,10 +536,11 @@ export const masterRouter = createTRPCRouter({
     return masters.map(({ twoFactorEnabledAt, ...master }) => ({
       ...master,
       souEu: master.id === ctx.session.user.id,
-      /* Master é sempre obrigado: nunca existe o estado "opcional" aqui. */
+      /* Para master a segunda etapa é sempre recomendada — a conta abre
+         todas as academias —, então "opcional" não existe aqui. */
       doisFatores: twoFactorEnabledAt
         ? ('ativo' as const)
-        : ('pendente' as const),
+        : ('recomendado' as const),
       doisFatoresDesde: twoFactorEnabledAt,
     }));
   }),

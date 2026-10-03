@@ -4,8 +4,6 @@ import { redirect } from 'next/navigation';
 import { NOME_DO_SISTEMA } from '@/common/constants/sistema';
 import { getServerAuthSession } from '@/server/auth';
 import { getCurrentTenant, masterHost } from '@/server/tenant/resolve';
-import { exigeDoisFatores, temDoisFatores } from '@/server/auth/twoFactor';
-import { TwoFactorRequired } from '@/components/security/twoFactorRequired.component';
 import { ThemeToggler } from '@/components/theme/theme-toggler';
 import { MasterNav } from '@/components/master/masterNav.component';
 import { MasterUserMenu } from '@/components/master/masterUserMenu.component';
@@ -31,15 +29,6 @@ export default async function MasterLayout({
   if (tenant) {
     const casa = masterHost();
     redirect(casa ? `https://${casa}/master` : '/painel');
-  }
-
-  /* O dono do sistema enxerga todas as academias; sem segunda etapa, uma
-     senha vazada entregaria todas de uma vez. */
-  if (
-    exigeDoisFatores(session.user.role) &&
-    !(await temDoisFatores(session.user.id))
-  ) {
-    return <TwoFactorRequired nome={session.user.name} destino="/master" />;
   }
 
   return (

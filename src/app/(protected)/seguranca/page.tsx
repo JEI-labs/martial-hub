@@ -28,8 +28,9 @@ export default function SegurancaPage() {
             </>
           }
         >
-          Senha é o que você sabe; o código é o que você tem na mão. Para quem é
-          dono da academia ou do sistema, essa segunda etapa é obrigatória.
+          Senha é o que você sabe; o código é o que você tem na mão. Não é
+          obrigatório, mas se você é dono da academia vale a pena: a sua conta
+          abre os dados de todos os alunos e todo o financeiro.
         </PageIntro>
 
         <TwoFactorCard />

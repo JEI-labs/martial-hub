@@ -6,7 +6,7 @@ import { z } from 'zod';
 
 import {
   conferirCodigo,
-  exigeDoisFatores,
+  recomendaDoisFatores,
   gerarCodigosDeRecuperacao,
   gerarQrCode,
   gerarSegredo,
@@ -28,7 +28,7 @@ export const securityRouter = createTRPCRouter({
     return {
       ativo: Boolean(user.twoFactorEnabledAt),
       desde: user.twoFactorEnabledAt,
-      obrigatorio: exigeDoisFatores(user.role),
+      recomendado: recomendaDoisFatores(user.role),
       codigosRestantes: user.twoFactorRecoveryCodes.length,
     };
   }),
@@ -144,14 +144,6 @@ export const securityRouter = createTRPCRouter({
         where: { id: ctx.session.user.id },
         select: { role: true, twoFactorSecret: true },
       });
-
-      if (exigeDoisFatores(user.role)) {
-        throw new TRPCError({
-          code: 'FORBIDDEN',
-          message:
-            'A verificação em duas etapas é obrigatória para este acesso.',
-        });
-      }
 
       if (
         !user.twoFactorSecret ||
