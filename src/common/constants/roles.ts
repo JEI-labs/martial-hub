@@ -38,6 +38,7 @@ export const ROLE_SECTIONS: Record<EUserRole, ReadonlyArray<string>> = {
   [EUserRole.MASTER]: [
     '/painel',
     '/alunos',
+    '/agenda',
     '/financeiro',
     '/cadastros',
     '/whatsapp',
@@ -45,10 +46,13 @@ export const ROLE_SECTIONS: Record<EUserRole, ReadonlyArray<string>> = {
   [EUserRole.OWNER]: [
     '/painel',
     '/alunos',
+    '/agenda',
     '/financeiro',
     '/cadastros',
     '/whatsapp',
   ],
+  /* A recepção não entra na agenda: ela é pessoal do professor, e marcar aula
+     no lugar dele seria decidir o horário de outra pessoa. */
   [EUserRole.STAFF]: ['/painel', '/alunos', '/financeiro', '/whatsapp'],
-  [EUserRole.TEACHER]: ['/alunos'],
+  [EUserRole.TEACHER]: ['/alunos', '/agenda'],
 };

@@ -195,6 +195,16 @@ export const ownerProcedure = exigirPapel([EUserRole.OWNER]);
 /** O dia a dia da recepção: aluno, matrícula, pagamento, lançamento. */
 export const staffProcedure = exigirPapel([EUserRole.OWNER, EUserRole.STAFF]);
 
+/**
+ * A agenda é de quem dá aula: o dono — que nestas academias costuma ser o
+ * professor — e o professor. A recepção fica de fora porque a agenda é
+ * pessoal; o dono vê a de todos, o professor só a sua.
+ */
+export const agendaProcedure = exigirPapel([
+  EUserRole.OWNER,
+  EUserRole.TEACHER,
+]);
+
 /** Tudo que o professor também faz: olhar aluno e registrar graduação. */
 export const teacherProcedure = exigirPapel([
   EUserRole.OWNER,

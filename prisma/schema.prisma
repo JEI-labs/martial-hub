@@ -74,6 +74,16 @@ enum EGraduation {
   GRAU_11
 }
 
+enum EAppointmentRecurrence {
+  NONE
+  WEEKLY
+}
+
+enum EAppointmentStatus {
+  SCHEDULED
+  CANCELED
+}
+
 enum ECategoryStatus {
   ACTIVE
   INACTIVE
@@ -109,6 +119,8 @@ model Tenant {
   messageAutomations MessageAutomation[]
   messageLogs        MessageLog[]
   supportAccesses    SupportAccess[]
+  lessonTypes        LessonType[]
+  appointments       Appointment[]
 
   @@index([status])
 }
@@ -232,6 +244,7 @@ model User {
   messageLogs        MessageLog[]
   messageAutomations MessageAutomation[]
   supportAccesses    SupportAccess[]
+  appointments       Appointment[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -249,9 +262,10 @@ model Student {
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
 
-  enrollments Enrollment[]
-  payments    Payment[]
-  messageLogs MessageLog[]
+  enrollments  Enrollment[]
+  payments     Payment[]
+  messageLogs  MessageLog[]
+  appointments AppointmentStudent[]
 
   /// Dono do dado é a academia; isto aqui é só quem cadastrou.
 
@@ -617,4 +631,110 @@ model MessageLog {
 
   @@index([tenantId, createdAt])
   @@index([studentId, event, createdAt])
+}
+
+/// Um tipo de aula particular, com o que ela custa e quanto dura.
+///
+/// Fica à parte do plano de propósito: particular não é mensalidade, tem
+/// preço próprio e entra no caixa por outra categoria.
+model LessonType {
+  id              String   @id @default(uuid())
+  name            String
+  /// Valor cobrado por aula. A agenda copia este número no agendamento, em
+  /// vez de apontar para cá: mudar a tabela amanhã não pode reescrever o que
+  /// já foi cobrado.
+  price           Float
+  /// Duração em minutos, que o formulário da agenda usa para preencher o fim.
+  durationMinutes Int      @default(60)
+  /// Já vem escolhido ao agendar. No máximo um por academia.
+  isDefault       Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  appointments Appointment[]
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+/// Um horário na agenda do professor: aula particular, avaliação, o que for.
+///
+/// Numa série semanal esta linha é a série inteira, não uma aula — `startsAt`
+/// dá o dia da semana e a hora, e as ocorrências são calculadas na hora de
+/// listar. Materializar cada semana no banco obrigaria a escolher até quando
+/// o futuro vai.
+model Appointment {
+  id          String                 @id @default(uuid())
+  title       String?
+  notes       String?
+  /// Primeira ocorrência. Numa série, define o dia da semana e o horário.
+  startsAt    DateTime
+  endsAt      DateTime
+  recurrence  EAppointmentRecurrence @default(NONE)
+  /// Até quando a série se repete. Nulo numa série semanal: sem fim previsto.
+  repeatUntil DateTime?
+  /// Cancelar aqui derruba a série inteira; uma aula só se cancela pela
+  /// ocorrência.
+  status      EAppointmentStatus     @default(SCHEDULED)
+  /// Cópia do preço no momento do agendamento, pelo motivo descrito em
+  /// `LessonType.price`.
+  price       Float?
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  lessonTypeId String?
+  lessonType   LessonType? @relation(fields: [lessonTypeId], references: [id], onDelete: SetNull)
+
+  /// De quem é a agenda. Sai junto com o acesso: aula particular é dele, e
+  /// manter horário de quem não trabalha mais ali confunde mais do que ajuda.
+  teacherId String
+  teacher   User   @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  students    AppointmentStudent[]
+  occurrences AppointmentOccurrence[]
+
+  @@index([tenantId, startsAt])
+  @@index([teacherId, startsAt])
+}
+
+/// Quem está em cada horário. Particular costuma ser um; turma pequena, mais.
+model AppointmentStudent {
+  appointmentId String
+  studentId     String
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  student     Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@id([appointmentId, studentId])
+  @@index([studentId])
+}
+
+/// O que foi decidido sobre **uma** aula da série: ela não aconteceu, ou foi
+/// paga. Sem linha aqui, a ocorrência é o que a série diz — marcada e em
+/// aberto. Só existe linha quando alguém mudou alguma coisa.
+model AppointmentOccurrence {
+  id             String             @id @default(uuid())
+  /// O dia daquela aula, à meia-noite. É a chave que liga a decisão à data.
+  date           DateTime
+  status         EAppointmentStatus @default(SCHEDULED)
+  /// Quando foi paga. O lançamento no caixa nasce junto.
+  paidAt         DateTime?
+  /// O lançamento gerado, para desfazer junto se a aula for desmarcada.
+  financeEntryId String?
+
+  appointmentId String
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([appointmentId, date])
+  @@index([appointmentId])
 }

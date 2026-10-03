@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from 'next/navigation';
 import {
   BarChart2,
+  CalendarClock,
   DollarSign,
   Bot,
   History,
@@ -31,6 +32,7 @@ const SECTIONS = {
   ],
   registrations: [
     { label: 'Planos', href: '/cadastros/planos', icon: Package },
+    { label: 'Aulas', href: '/cadastros/aulas', icon: CalendarClock },
     { label: 'Categorias', href: '/cadastros/categorias', icon: Layers3 },
     { label: 'Promoções', href: '/cadastros/promocoes', icon: Tag },
     {
