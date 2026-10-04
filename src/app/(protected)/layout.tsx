@@ -74,7 +74,11 @@ export default async function DashboardLayout({
         {session.user.role === EUserRole.OWNER && <BillingBanner />}
 
         <div className="min-h-[calc(100vh-2rem)]">
-          <div className="bg-card shadow-card flex items-center justify-between px-4 py-3 md:mt-6 md:rounded-2xl md:px-6">
+          {/* Grudado no topo só no celular: lá a tela é curta e o menu e a
+              conta precisam estar a um toque de distância de qualquer ponto
+              da página. No computador ele rola junto, porque a barra lateral
+              já fica sempre à vista. */}
+          <div className="bg-card shadow-card sticky top-0 z-30 flex items-center justify-between px-4 py-3 md:static md:mt-6 md:rounded-2xl md:px-6">
             <div className="flex items-center gap-2">
               <SidebarTrigger />
               <div className="hidden md:flex">
