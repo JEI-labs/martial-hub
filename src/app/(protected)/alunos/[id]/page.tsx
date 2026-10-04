@@ -122,7 +122,7 @@ export default function StudentDetailPage({
           <CardContent className="flex flex-col gap-5 p-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="flex min-w-0 items-center gap-4">
-                <Avatar className="border-border h-20 w-20 shrink-0 border">
+                <Avatar className="border-border size-14 shrink-0 border sm:size-20">
                   <AvatarImage
                     src={student.avatar || undefined}
                     className="h-full w-full rounded-full object-cover"
@@ -133,7 +133,11 @@ export default function StudentDetailPage({
                 </Avatar>
 
                 <div className="min-w-0">
-                  <h1 className="truncate text-2xl font-semibold">
+                  {/* No celular o nome tem a linha inteira para ele e quebra;
+                      cortá-lo em "João Vitor Card…" era economia que não valia.
+                      No computador ele divide a linha com os botões, e aí
+                      cortar é melhor do que espremer letra a letra. */}
+                  <h1 className="text-xl font-semibold break-words sm:truncate sm:text-2xl">
                     {student.name}
                   </h1>
 
@@ -159,51 +163,62 @@ export default function StudentDetailPage({
               </div>
 
               {/* Três ações à vista e o resto no menu: com cinco botões lado a
-                  lado nenhum deles era o principal, e a linha quebrava. */}
-              <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                <Button onClick={() => setPayOpen(true)}>
+                  lado nenhum deles era o principal, e a linha quebrava. No
+                  celular viram grade, senão cada um fica de uma largura e a
+                  coluna parece desalinhada. */}
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
+                <Button
+                  className="col-span-2 w-full sm:col-auto sm:w-auto"
+                  onClick={() => setPayOpen(true)}
+                >
                   <Wallet className="mr-2 h-4 w-4" />
                   Registrar pagamento
                 </Button>
 
                 <Button
                   variant="outline"
+                  className="w-full sm:w-auto"
                   onClick={() => setChangePlanOpen(true)}
                 >
                   <Repeat className="mr-2 h-4 w-4" />
                   {student.activeEnrollment ? 'Trocar plano' : 'Matricular'}
                 </Button>
 
-                <Button
-                  variant="outline"
-                  onClick={() =>
-                    router.push(`/alunos/${student.id}/pagamentos`)
-                  }
-                >
-                  <CreditCard className="mr-2 h-4 w-4" />
-                  Pagamentos
-                </Button>
+                {/* O menu divide a célula com "Pagamentos": sozinho numa
+                    terceira linha ele ficaria perdido. */}
+                <div className="flex items-center gap-1 sm:contents">
+                  <Button
+                    variant="outline"
+                    className="min-w-0 flex-1 sm:flex-none"
+                    onClick={() =>
+                      router.push(`/alunos/${student.id}/pagamentos`)
+                    }
+                  >
+                    <CreditCard className="mr-2 h-4 w-4 shrink-0" />
+                    Pagamentos
+                  </Button>
 
-                <RowActions
-                  srLabel={`Mais ações de ${student.name}`}
-                  actions={[
-                    {
-                      label: 'Editar dados',
-                      icon: Edit2,
-                      onSelect: () => setEditOpen(true),
-                    },
-                    ...(student.activeEnrollment
-                      ? [
-                          {
-                            label: 'Cancelar matrícula',
-                            icon: UserMinus,
-                            destructive: true,
-                            onSelect: () => setCancelOpen(true),
-                          },
-                        ]
-                      : []),
-                  ]}
-                />
+                  <RowActions
+                    srLabel={`Mais ações de ${student.name}`}
+                    actions={[
+                      {
+                        label: 'Editar dados',
+                        icon: Edit2,
+                        onSelect: () => setEditOpen(true),
+                      },
+                      ...(student.activeEnrollment
+                        ? [
+                            {
+                              label: 'Cancelar matrícula',
+                              icon: UserMinus,
+                              destructive: true,
+                              onSelect: () => setCancelOpen(true),
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
+                </div>
               </div>
             </div>
 
@@ -232,7 +247,7 @@ export default function StudentDetailPage({
       </div>
 
       {/* Resumo financeiro */}
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <SummaryTile label="Parcelas pagas" value={String(totals.paidCount)} />
         <SummaryTile
           label="Total pago"
@@ -296,44 +311,78 @@ export default function StudentDetailPage({
           {student.enrollments.length === 0 ? (
             <EmptyRow text="Nenhuma matrícula registrada." />
           ) : (
-            <Table containerClassName="max-h-[22rem] overflow-y-auto">
-              <TableHeader className="bg-card sticky top-0 z-10">
-                <TableRow>
-                  <TableHead>Plano</TableHead>
-                  <TableHead>Início</TableHead>
-                  <TableHead>Fim</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
-                  <TableHead>Situação</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              {/* No celular a tabela ficava cortada dentro do cartão: cinco
+                  colunas não cabem em 390px, e o que sobrava era invisível. */}
+              <div className="flex flex-col gap-2 p-4 md:hidden">
                 {student.enrollments.map((enrollment) => (
-                  <TableRow key={enrollment.id}>
-                    <TableCell className="font-medium">
-                      {enrollment.plan?.name ?? '—'}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatDate(enrollment.startDate)}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatDate(enrollment.endDate)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {enrollment.plan
-                        ? formatMoney(Number(enrollment.plan.price))
-                        : '—'}
-                    </TableCell>
-                    <TableCell>
+                  <div
+                    key={enrollment.id}
+                    className="bg-muted/60 flex flex-col gap-1 rounded-xl p-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-medium">
+                        {enrollment.plan?.name ?? '—'}
+                      </p>
                       <Badge
                         variant={enrollment.isActive ? 'success' : 'secondary'}
                       >
                         {enrollment.isActive ? 'Ativa' : 'Encerrada'}
                       </Badge>
-                    </TableCell>
-                  </TableRow>
+                    </div>
+
+                    <p className="text-muted-foreground text-sm">
+                      {formatDate(enrollment.startDate)} a{' '}
+                      {formatDate(enrollment.endDate)}
+                      {enrollment.plan
+                        ? ` · ${formatMoney(Number(enrollment.plan.price))}`
+                        : ''}
+                    </p>
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+
+              <Table containerClassName="hidden max-h-[22rem] overflow-y-auto md:block">
+                <TableHeader className="bg-card sticky top-0 z-10">
+                  <TableRow>
+                    <TableHead>Plano</TableHead>
+                    <TableHead>Início</TableHead>
+                    <TableHead>Fim</TableHead>
+                    <TableHead className="text-right">Valor</TableHead>
+                    <TableHead>Situação</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {student.enrollments.map((enrollment) => (
+                    <TableRow key={enrollment.id}>
+                      <TableCell className="font-medium">
+                        {enrollment.plan?.name ?? '—'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatDate(enrollment.startDate)}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatDate(enrollment.endDate)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {enrollment.plan
+                          ? formatMoney(Number(enrollment.plan.price))
+                          : '—'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            enrollment.isActive ? 'success' : 'secondary'
+                          }
+                        >
+                          {enrollment.isActive ? 'Ativa' : 'Encerrada'}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </>
           )}
         </CardContent>
       </Card>
@@ -356,43 +405,78 @@ export default function StudentDetailPage({
           {student.payments.length === 0 ? (
             <EmptyRow text="Nenhuma parcela registrada." />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Vencimento</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Pago em</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              <div className="flex flex-col gap-2 p-4 md:hidden">
                 {latestPayments.map((payment) => {
-                  const isOverdue =
+                  const atrasada =
                     payment.status === 'PENDING' &&
                     new Date(payment.dueDate) < new Date();
-                  const badge =
-                    PAYMENT_STATUS[isOverdue ? 'OVERDUE' : payment.status] ??
+                  const etiqueta =
+                    PAYMENT_STATUS[atrasada ? 'OVERDUE' : payment.status] ??
                     PAYMENT_STATUS.PENDING;
 
                   return (
-                    <TableRow key={payment.id}>
-                      <TableCell>{formatDate(payment.dueDate)}</TableCell>
-                      <TableCell className="text-right">
-                        {formatMoney(Number(payment.amount))}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={badge.variant}>{badge.label}</Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {payment.status === 'PAID'
-                          ? formatPaymentMoment(payment.paymentDate)
-                          : '—'}
-                      </TableCell>
-                    </TableRow>
+                    <div
+                      key={payment.id}
+                      className="bg-muted/60 flex flex-col gap-1 rounded-xl p-3"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-medium">
+                          {formatMoney(Number(payment.amount))}
+                        </p>
+                        <Badge variant={etiqueta.variant}>
+                          {etiqueta.label}
+                        </Badge>
+                      </div>
+
+                      <p className="text-muted-foreground text-sm">
+                        vence {formatDate(payment.dueDate)}
+                        {payment.status === 'PAID' &&
+                          ` · pago ${formatPaymentMoment(payment.paymentDate)}`}
+                      </p>
+                    </div>
                   );
                 })}
-              </TableBody>
-            </Table>
+              </div>
+
+              <Table className="hidden md:table">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Vencimento</TableHead>
+                    <TableHead className="text-right">Valor</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Pago em</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {latestPayments.map((payment) => {
+                    const isOverdue =
+                      payment.status === 'PENDING' &&
+                      new Date(payment.dueDate) < new Date();
+                    const badge =
+                      PAYMENT_STATUS[isOverdue ? 'OVERDUE' : payment.status] ??
+                      PAYMENT_STATUS.PENDING;
+
+                    return (
+                      <TableRow key={payment.id}>
+                        <TableCell>{formatDate(payment.dueDate)}</TableCell>
+                        <TableCell className="text-right">
+                          {formatMoney(Number(payment.amount))}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={badge.variant}>{badge.label}</Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {payment.status === 'PAID'
+                            ? formatPaymentMoment(payment.paymentDate)
+                            : '—'}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </>
           )}
         </CardContent>
       </Card>
@@ -406,36 +490,63 @@ export default function StudentDetailPage({
           {student.FinanceEntry.length === 0 ? (
             <EmptyRow text="Nenhum lançamento vinculado a este aluno." />
           ) : (
-            <Table containerClassName="max-h-[22rem] overflow-y-auto">
-              <TableHeader className="bg-card sticky top-0 z-10">
-                <TableRow>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
+            <>
+              <div className="flex flex-col gap-2 p-4 md:hidden">
                 {student.FinanceEntry.map((entry) => (
-                  <TableRow key={entry.id}>
-                    <TableCell className="text-muted-foreground">
-                      {formatDate(entry.date)}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {entry.category?.name ?? '—'}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground max-w-xs truncate">
+                  <div
+                    key={entry.id}
+                    className="bg-muted/60 flex flex-col gap-1 rounded-xl p-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="min-w-0 font-medium">
+                        {entry.category?.name ?? '—'}
+                      </p>
+                      <p className="font-semibold text-green-600">
+                        {maskDecimalWithAcronym(Number(entry.amount))}
+                      </p>
+                    </div>
+
+                    <p className="text-muted-foreground text-sm">
                       {entry.description ?? '—'}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold text-green-600">
-                      {/* FinanceEntry.amount fica em centavos, ao contrário
-                          de Payment.amount, que está em reais */}
-                      {maskDecimalWithAcronym(Number(entry.amount))}
-                    </TableCell>
-                  </TableRow>
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      {formatDate(entry.date)}
+                    </p>
+                  </div>
                 ))}
-              </TableBody>
-            </Table>
+              </div>
+
+              <Table containerClassName="hidden max-h-[22rem] overflow-y-auto md:block">
+                <TableHeader className="bg-card sticky top-0 z-10">
+                  <TableRow>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Categoria</TableHead>
+                    <TableHead>Descrição</TableHead>
+                    <TableHead className="text-right">Valor</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {student.FinanceEntry.map((entry) => (
+                    <TableRow key={entry.id}>
+                      <TableCell className="text-muted-foreground">
+                        {formatDate(entry.date)}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        {entry.category?.name ?? '—'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground max-w-xs truncate">
+                        {entry.description ?? '—'}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold text-green-600">
+                        {/* FinanceEntry.amount fica em centavos, ao contrário
+                          de Payment.amount, que está em reais */}
+                        {maskDecimalWithAcronym(Number(entry.amount))}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </>
           )}
         </CardContent>
       </Card>
@@ -491,7 +602,7 @@ function SummaryTile({
         <p className="text-muted-foreground text-xs uppercase">{label}</p>
         <p
           className={cn(
-            'mt-1 text-2xl font-semibold',
+            'mt-1 text-xl font-semibold sm:text-2xl',
             tone === 'positive' && 'text-green-600',
             tone === 'negative' && 'text-red-600',
           )}
