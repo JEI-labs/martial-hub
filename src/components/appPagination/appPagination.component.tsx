@@ -25,6 +25,13 @@ export function AppPagination({
   const itemsPerPageLabel = 'Itens';
   const totalPages = Math.ceil(totalItems / itemsPerPage);
 
+  /* O tamanho em uso entra na lista quando não está nela: sem isto, uma tela
+     que pede 20 por página abria o seletor vazio, porque o Select não tem o
+     que mostrar para um valor que não é opção. */
+  const opcoes = itemsPerPageOptions.includes(itemsPerPage)
+    ? itemsPerPageOptions
+    : [...itemsPerPageOptions, itemsPerPage].sort((a, b) => a - b);
+
   return (
     <div className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-2">
       <div className="flex items-center gap-1 text-xs font-medium md:text-sm">
@@ -45,13 +52,15 @@ export function AppPagination({
             </span>
             <Select
               onValueChange={(value) => onItemsPerPageChange(Number(value))}
-              defaultValue={String(itemsPerPage)}
+              /* Controlado: `defaultValue` ignorava o tamanho quando a tela
+                 mudava por fora, e o seletor passava a mentir. */
+              value={String(itemsPerPage)}
             >
               <SelectTrigger className="h-7 w-[60px] rounded border px-2 py-0 text-xs md:h-8 md:text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-background">
-                {itemsPerPageOptions.map((option) => (
+                {opcoes.map((option) => (
                   <SelectItem
                     key={option}
                     value={String(option)}

@@ -54,7 +54,39 @@ export function MessageHistory() {
           </CardTitle>
         </CardHeader>
 
-        <CardContent className="p-0">
+        {/* No celular, uma lista. Três colunas em 390px espremiam o telefone
+            a ponto de ele quebrar dígito a dígito, e a situação — que é o que
+            se vem olhar aqui — ficava cortada fora da tela. */}
+        <CardContent className="flex flex-col gap-2 p-4 md:hidden">
+          {data.data.map((log) => (
+            <div
+              key={log.id}
+              className="bg-muted/60 flex flex-col gap-1 rounded-xl p-3"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <p className="min-w-0 font-medium">
+                  {log.student?.name ?? 'Contato avulso'}
+                </p>
+                <Situacao log={log} />
+              </div>
+
+              <p className="text-muted-foreground text-sm">
+                {formatPhone(log.toNumber)}
+              </p>
+
+              <p className="text-muted-foreground text-xs">
+                {format(new Date(log.createdAt), 'dd/MM/yyyy HH:mm')} ·{' '}
+                {MESSAGE_EVENTS[log.event].label}
+              </p>
+
+              {log.status !== EMessageStatus.SENT && log.error && (
+                <p className="text-destructive-text text-xs">{log.error}</p>
+              )}
+            </div>
+          ))}
+        </CardContent>
+
+        <CardContent className="hidden p-0 md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -86,18 +118,16 @@ export function MessageHistory() {
                   </TableCell>
 
                   <TableCell>
-                    {log.status === EMessageStatus.SENT ? (
-                      <Badge variant="success">Enviada</Badge>
-                    ) : (
-                      <div className="flex flex-col gap-1">
-                        <Badge variant="destructive">Falhou</Badge>
-                        {log.error && (
-                          <span className="text-muted-foreground max-w-xs truncate text-xs">
-                            {log.error}
-                          </span>
-                        )}
-                      </div>
-                    )}
+                    {/* items-start: sem isto a etiqueta estica e vira uma
+                        barra da largura da coluna. */}
+                    <div className="flex flex-col items-start gap-1">
+                      <Situacao log={log} />
+                      {log.status !== EMessageStatus.SENT && log.error && (
+                        <span className="text-muted-foreground max-w-xs truncate text-xs">
+                          {log.error}
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -114,5 +144,14 @@ export function MessageHistory() {
         onItemsPerPageChange={setLimit}
       />
     </div>
+  );
+}
+
+/** Enviada ou falhou — a etiqueta é a mesma nas duas apresentações. */
+function Situacao({ log }: { log: { status: EMessageStatus } }) {
+  return log.status === EMessageStatus.SENT ? (
+    <Badge variant="success">Enviada</Badge>
+  ) : (
+    <Badge variant="destructive">Falhou</Badge>
   );
 }
