@@ -282,9 +282,20 @@ export default function StudentDetailPage({
         <CardHeader>
           <CardTitle>Dados do aluno</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="Nome" value={student.name} />
-          <Field label="E-mail" value={student.email} />
+        {/* Dois por linha no celular: datas e nomes curtos cabiam folgados na
+            metade, e um campo por linha fazia nove campos virarem uma tela
+            inteira de rolagem. Nome e e-mail ficam com a linha toda. */}
+        <CardContent className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <Field
+            label="Nome"
+            value={student.name}
+            className="col-span-2 lg:col-span-1"
+          />
+          <Field
+            label="E-mail"
+            value={student.email}
+            className="col-span-2 lg:col-span-1"
+          />
           <Field
             label="Telefone"
             value={student.phone ? maskCellphone(student.phone) : '—'}
@@ -326,7 +337,7 @@ export default function StudentDetailPage({
             <>
               {/* No celular a tabela ficava cortada dentro do cartão: cinco
                   colunas não cabem em 390px, e o que sobrava era invisível. */}
-              <div className="flex flex-col gap-2 p-4 md:hidden">
+              <div className="flex flex-col gap-2 px-4 pb-4 md:hidden">
                 {student.enrollments.map((enrollment) => (
                   <div
                     key={enrollment.id}
@@ -418,7 +429,7 @@ export default function StudentDetailPage({
             <EmptyRow text="Nenhuma parcela registrada." />
           ) : (
             <>
-              <div className="flex flex-col gap-2 p-4 md:hidden">
+              <div className="flex flex-col gap-2 px-4 pb-4 md:hidden">
                 {latestPayments.map((payment) => {
                   const atrasada =
                     payment.status === 'PENDING' &&
@@ -503,7 +514,7 @@ export default function StudentDetailPage({
             <EmptyRow text="Nenhum lançamento vinculado a este aluno." />
           ) : (
             <>
-              <div className="flex flex-col gap-2 p-4 md:hidden">
+              <div className="flex flex-col gap-2 px-4 pb-4 md:hidden">
                 {student.FinanceEntry.map((entry) => (
                   <div
                     key={entry.id}
@@ -626,9 +637,18 @@ function SummaryTile({
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function Field({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value: string;
+  /** Para o campo ocupar a linha inteira quando o valor é longo. */
+  className?: string;
+}) {
   return (
-    <div>
+    <div className={className}>
       <p className="text-muted-foreground text-xs uppercase">{label}</p>
       <p className="mt-1 text-sm font-medium break-words">{value}</p>
     </div>

@@ -57,7 +57,7 @@ export function MessageHistory() {
         {/* No celular, uma lista. Três colunas em 390px espremiam o telefone
             a ponto de ele quebrar dígito a dígito, e a situação — que é o que
             se vem olhar aqui — ficava cortada fora da tela. */}
-        <CardContent className="flex flex-col gap-2 p-4 md:hidden">
+        <CardContent className="flex flex-col gap-2 px-4 pb-4 md:hidden">
           {data.data.map((log) => (
             <div
               key={log.id}
