@@ -62,26 +62,8 @@ export default function PlansPage() {
       <BreadcrumbUpdater items={breadcrumbItems} />
 
       <main className="flex flex-col gap-4">
-        <PageIntro
-          icon={Package}
-          title="O que é um plano?"
-          example={
-            <>
-              <strong className="text-foreground font-medium">
-                Trimestral
-              </strong>{' '}
-              — R$ 450 por 3 meses. Na cobrança{' '}
-              <strong className="text-foreground font-medium">mensal</strong>, a
-              matrícula gera três parcelas de R$ 150. Na{' '}
-              <strong className="text-foreground font-medium">à vista</strong>,
-              gera uma só de R$ 450, já paga, e o aluno fica sem nada vencendo
-              até a renovação.
-            </>
-          }
-        >
-          É o contrato que o aluno assina: quanto custa e por quantos meses
-          vale. O preço é o do período inteiro; quem divide em parcelas é a
-          forma de cobrança escolhida no plano.
+        <PageIntro icon={Package} title="Planos">
+          Valor e duração da mensalidade dos alunos.
         </PageIntro>
 
         <ListToolbar

@@ -18,19 +18,8 @@ export default function LessonTypesPage() {
       <BreadcrumbUpdater items={breadcrumbItems} />
 
       <main className="flex flex-col gap-4">
-        <PageIntro
-          icon={CalendarClock}
-          title="Quanto custa cada aula"
-          example={
-            <>
-              Uma aula particular de uma hora por R$ 120, uma avaliação de
-              trinta minutos por R$ 80 — a agenda preenche sozinha quando você
-              escolher o tipo.
-            </>
-          }
-        >
-          Aula avulsa não é mensalidade: tem preço próprio e entra no caixa por
-          uma categoria separada, para você enxergar quanto cada coisa rende.
+        <PageIntro icon={CalendarClock} title="Tipos de aula">
+          Preço e duração do que a academia cobra fora da mensalidade.
         </PageIntro>
 
         <LessonTypesCard />

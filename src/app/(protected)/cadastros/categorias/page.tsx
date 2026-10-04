@@ -82,26 +82,8 @@ export default function CategoriesPage() {
       <BreadcrumbUpdater items={breadcrumbItems} />
 
       <main className="flex flex-col gap-4">
-        <PageIntro
-          icon={Layers3}
-          title="O que é uma categoria?"
-          example={
-            <>
-              <strong className="text-foreground font-medium">Aluguel</strong>,{' '}
-              <strong className="text-foreground font-medium">Energia</strong>{' '}
-              ou{' '}
-              <strong className="text-foreground font-medium">
-                Equipamentos
-              </strong>{' '}
-              para as despesas. A categoria <em>Alunos</em> já vem pronta e é do
-              sistema: as mensalidades caem nela sozinhas, e por isso ela não
-              pode ser editada nem excluída.
-            </>
-          }
-        >
-          É a gaveta onde cada lançamento do financeiro é guardado. Todo
-          lançamento precisa de uma, e é por ela que o resumo consegue dizer
-          para onde o dinheiro da academia foi.
+        <PageIntro icon={Layers3} title="Categorias">
+          A gaveta em que cada lançamento do financeiro entra.
         </PageIntro>
 
         <ListToolbar

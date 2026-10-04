@@ -18,14 +18,8 @@ export default function WhatsappAutomationsPage() {
       <BreadcrumbUpdater items={breadcrumbItems} />
 
       <div className="flex flex-col gap-4">
-        <PageIntro
-          icon={Bot}
-          title="O que são mensagens automáticas?"
-          example="Lembrete 3 dias antes do vencimento, a partir das 9h: todo aluno com parcela vencendo naquele dia recebe o texto do modelo escolhido."
-        >
-          São os envios que o sistema faz sozinho, sem ninguém clicar. Você liga
-          a situação, escolhe o texto e a partir de quando pode disparar — cada
-          aluno recebe no máximo uma mensagem por dia de cada tipo.
+        <PageIntro icon={Bot} title="Mensagens automáticas">
+          Envios que o sistema faz sozinho, sem ninguém clicar.
         </PageIntro>
 
         <AutomationsCard />

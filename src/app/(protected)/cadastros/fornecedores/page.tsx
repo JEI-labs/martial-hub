@@ -77,21 +77,8 @@ export default function SuppliersPage() {
       <BreadcrumbUpdater items={breadcrumbItems} />
 
       <main className="flex flex-col gap-4">
-        <PageIntro
-          icon={UserSquare}
-          title="O que é um fornecedor?"
-          example={
-            <>
-              <strong className="text-foreground font-medium">
-                Casa do Boxe
-              </strong>{' '}
-              — material de treino, (11) 99999-0000, São Paulo/SP.
-            </>
-          }
-        >
-          É quem vende ou presta serviço para a academia. A tela guarda o
-          contato e o endereço de cada um, para ter à mão na hora de repor
-          material ou chamar uma manutenção.
+        <PageIntro icon={UserSquare} title="Fornecedores">
+          Quem vende ou presta serviço para a academia.
         </PageIntro>
 
         <ListToolbar

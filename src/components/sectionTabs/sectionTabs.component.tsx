@@ -65,8 +65,10 @@ export function SectionTabs({ section }: { section: SectionName }) {
 
   return (
     <Tabs value={active} onValueChange={(href) => router.push(href)}>
-      {/* rola de lado no celular em vez de quebrar a linha */}
-      <TabsList className="max-w-full justify-start overflow-x-auto">
+      {/* Quebra a linha no celular em vez de rolar de lado: aba que só
+          aparece ao arrastar é aba que ninguém encontra, e depois que a seção
+          passou de quatro itens metade delas vivia fora da tela. */}
+      <TabsList className="h-auto max-w-full flex-wrap justify-start rounded-3xl">
         {tabs.map((tab) => (
           <TabsTrigger key={tab.href} value={tab.href}>
             <tab.icon />

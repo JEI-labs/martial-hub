@@ -17,19 +17,9 @@ export default function AgendaPage() {
       <BreadcrumbUpdater items={breadcrumbItems} />
 
       <main className="flex flex-col gap-4">
-        <PageIntro
-          icon={CalendarClock}
-          title="Os seus horários"
-          example={
-            <>
-              Clique num espaço vazio da grade para marcar. Aula que se repete
-              toda semana é uma marcação só — e dá para desmarcar uma semana sem
-              derrubar as outras.
-            </>
-          }
-        >
-          Aula particular, avaliação, horário bloqueado. O valor de cada aula
-          entra no caixa da academia por uma categoria separada da mensalidade.
+        <PageIntro icon={CalendarClock} title="Agenda">
+          Aulas particulares e horários bloqueados. O que for pago entra no
+          caixa.
         </PageIntro>
 
         <AgendaView />

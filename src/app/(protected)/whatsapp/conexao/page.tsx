@@ -17,14 +17,8 @@ export default function WhatsappConnectionPage() {
       <BreadcrumbUpdater items={breadcrumbItems} />
 
       <div className="flex flex-col gap-4">
-        <PageIntro
-          icon={Plug}
-          title="O que é uma conexão?"
-          example="Celular da recepção — (44) 99999-9999, em uso."
-        >
-          É o número de WhatsApp por onde as mensagens saem. Conecte lendo o QR
-          code com o celular da academia, como no WhatsApp Web. Dá para ter mais
-          de um, mas só o ativo envia.
+        <PageIntro icon={Plug} title="Conexão">
+          O número de WhatsApp por onde as mensagens saem.
         </PageIntro>
 
         <WhatsappConfigCard />

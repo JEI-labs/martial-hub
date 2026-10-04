@@ -103,7 +103,7 @@ export function AutomationsCard() {
   if (isLoading) {
     return (
       <Card>
-        <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+        <CardHeader className="flex-col gap-3 space-y-0 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex flex-col gap-2">
             <Skeleton className="h-5 w-48" />
             <Skeleton className="h-4 w-72" />
@@ -165,7 +165,7 @@ export function AutomationsCard() {
 
   return (
     <Card>
-      <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+      <CardHeader className="flex-col gap-3 space-y-0 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <CardTitle>Mensagens automáticas</CardTitle>
           <CardDescription>
