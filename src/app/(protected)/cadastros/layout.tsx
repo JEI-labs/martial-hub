@@ -11,8 +11,6 @@ export default async function RegistrationsLayout({
 
   return (
     <div className="flex w-full flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Cadastros</h1>
-
       <SectionTabs section="registrations" />
 
       {children}

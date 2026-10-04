@@ -11,13 +11,6 @@ export default async function FinancialLayout({
 
   return (
     <div className="flex w-full flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Financeiro</h1>
-        <p className="text-muted-foreground text-sm">
-          O dinheiro da academia: o que entrou, o que saiu e o que sobrou.
-        </p>
-      </div>
-
       <SectionTabs section="financial" />
 
       {children}
