@@ -45,7 +45,9 @@ export function BillingBanner() {
     <div
       className={cn(
         'flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 py-2 text-sm',
-        '-mx-4 md:-mx-8',
+        /* Só a partir de md: no celular o shell não tem padding lateral, e a
+           margem negativa jogava a tarja para fora da tela. */
+        'md:-mx-8',
         atrasada
           ? 'bg-destructive text-destructive-foreground'
           : 'bg-alert text-alert-foreground',

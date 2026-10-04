@@ -8,7 +8,7 @@ import { LifeBuoy } from 'lucide-react';
  */
 export function SupportBanner({ tenantName }: { tenantName: string }) {
   return (
-    <div className="bg-alert text-alert-foreground sticky top-0 z-20 -mx-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 py-2 text-sm md:-mx-8">
+    <div className="bg-alert text-alert-foreground sticky top-0 z-20 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-4 py-2 text-sm md:-mx-8">
       <LifeBuoy className="size-4 shrink-0" aria-hidden />
       <span>
         Acesso de suporte · você está dentro de{' '}

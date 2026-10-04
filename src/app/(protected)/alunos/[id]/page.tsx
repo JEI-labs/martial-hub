@@ -232,7 +232,7 @@ export default function StudentDetailPage({
       </div>
 
       {/* Resumo financeiro */}
-      <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryTile label="Parcelas pagas" value={String(totals.paidCount)} />
         <SummaryTile
           label="Total pago"
@@ -255,7 +255,7 @@ export default function StudentDetailPage({
         <CardHeader>
           <CardTitle>Dados do aluno</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Field label="Nome" value={student.name} />
           <Field label="E-mail" value={student.email} />
           <Field
