@@ -97,6 +97,26 @@ export default function StudentDetailPage({
     )
     .slice(0, 5);
 
+  /* O menu aparece em dois lugares conforme o tamanho da tela, então a lista
+     mora aqui em vez de ser escrita duas vezes. */
+  const acoesDoMenu = [
+    {
+      label: 'Editar dados',
+      icon: Edit2,
+      onSelect: () => setEditOpen(true),
+    },
+    ...(student.activeEnrollment
+      ? [
+          {
+            label: 'Cancelar matrícula',
+            icon: UserMinus,
+            destructive: true,
+            onSelect: () => setCancelOpen(true),
+          },
+        ]
+      : []),
+  ];
+
   return (
     <div className="w-full">
       <BreadcrumbUpdater
@@ -160,6 +180,16 @@ export default function StudentDetailPage({
                     <Badge variant="secondary">{student.planName}</Badge>
                   </div>
                 </div>
+
+                {/* No celular o menu fica aqui, no alto. Dentro da grade de
+                    botões ele roubava a largura de "Pagamentos", e a borda do
+                    botão era cortada. */}
+                <div className="ml-auto shrink-0 sm:hidden">
+                  <RowActions
+                    srLabel={`Mais ações de ${student.name}`}
+                    actions={acoesDoMenu}
+                  />
+                </div>
               </div>
 
               {/* Três ações à vista e o resto no menu: com cinco botões lado a
@@ -184,39 +214,21 @@ export default function StudentDetailPage({
                   {student.activeEnrollment ? 'Trocar plano' : 'Matricular'}
                 </Button>
 
-                {/* O menu divide a célula com "Pagamentos": sozinho numa
-                    terceira linha ele ficaria perdido. */}
-                <div className="flex items-center gap-1 sm:contents">
-                  <Button
-                    variant="outline"
-                    className="min-w-0 flex-1 sm:flex-none"
-                    onClick={() =>
-                      router.push(`/alunos/${student.id}/pagamentos`)
-                    }
-                  >
-                    <CreditCard className="mr-2 h-4 w-4 shrink-0" />
-                    Pagamentos
-                  </Button>
+                <Button
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  onClick={() =>
+                    router.push(`/alunos/${student.id}/pagamentos`)
+                  }
+                >
+                  <CreditCard className="mr-2 h-4 w-4 shrink-0" />
+                  Pagamentos
+                </Button>
 
+                <div className="hidden sm:block">
                   <RowActions
                     srLabel={`Mais ações de ${student.name}`}
-                    actions={[
-                      {
-                        label: 'Editar dados',
-                        icon: Edit2,
-                        onSelect: () => setEditOpen(true),
-                      },
-                      ...(student.activeEnrollment
-                        ? [
-                            {
-                              label: 'Cancelar matrícula',
-                              icon: UserMinus,
-                              destructive: true,
-                              onSelect: () => setCancelOpen(true),
-                            },
-                          ]
-                        : []),
-                    ]}
+                    actions={acoesDoMenu}
                   />
                 </div>
               </div>
