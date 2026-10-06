@@ -14,8 +14,8 @@ export default async function RegistrationsLayout({
       <div>
         <h1 className="text-2xl font-semibold">Cadastros</h1>
         <p className="text-muted-foreground text-sm">
-          O que o resto do sistema usa como base: planos, categorias, promoções
-          e fornecedores.
+          O que o resto do sistema usa como base: planos, modalidades,
+          categorias, promoções e fornecedores.
         </p>
       </div>
 

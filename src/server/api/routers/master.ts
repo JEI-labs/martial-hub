@@ -25,6 +25,8 @@ import {
 } from '@/server/dns/hostinger';
 import { exigeDoisFatores } from '@/server/auth/twoFactor';
 import { criarBilheteDeSuporte } from '@/server/support/handoff';
+import { DEFAULT_MODALITY } from '@/common/constants/modalities';
+import { slugify } from '@/common/utils/string';
 import {
   DIAS_DE_AVISO,
   aplicarRegraDeCobranca,
@@ -300,9 +302,9 @@ export const masterRouter = createTRPCRouter({
     }),
 
   /**
-   * Nasce pronta para usar: academia, endereço, assinatura, dono e a
+   * Nasce pronta para usar: academia, endereço, assinatura, dono, a
    * categoria fixa que recebe as mensalidades — sem ela, matricular aluno
-   * quebra no primeiro pagamento.
+   * quebra no primeiro pagamento — e uma modalidade ativa.
    */
   createTenant: masterProcedure
     .input(
@@ -358,6 +360,12 @@ export const masterRouter = createTRPCRouter({
                 description: 'Mensalidades dos alunos',
                 status: ECategoryStatus.ACTIVE,
                 isFixed: true,
+              },
+            },
+            modalities: {
+              create: {
+                name: DEFAULT_MODALITY,
+                slug: slugify(DEFAULT_MODALITY),
               },
             },
             ...(hostname

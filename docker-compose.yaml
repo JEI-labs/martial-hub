@@ -13,5 +13,19 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
+  # Banco dos testes (`npm test`): a mesma versão do banco no ar e sem volume,
+  # para cada subida começar vazia e nada de teste sobrar em disco.
+  postgres-test:
+    image: postgres:15
+    container_name: thaiboxe-db-test
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: test
+    ports:
+      - "5435:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+
 volumes:
   postgres-data:

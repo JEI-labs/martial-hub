@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import {
   BarChart2,
   DollarSign,
+  Dumbbell,
   Bot,
   History,
   Layers3,
@@ -31,6 +32,7 @@ const SECTIONS = {
   ],
   registrations: [
     { label: 'Planos', href: '/cadastros/planos', icon: Package },
+    { label: 'Modalidades', href: '/cadastros/modalidades', icon: Dumbbell },
     { label: 'Categorias', href: '/cadastros/categorias', icon: Layers3 },
     { label: 'Promoções', href: '/cadastros/promocoes', icon: Tag },
     {

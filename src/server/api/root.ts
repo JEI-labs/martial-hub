@@ -13,6 +13,7 @@ import { dashboardRouter } from './routers/dashboard';
 import { tenantRouter } from './routers/tenant';
 import { masterRouter } from './routers/master';
 import { securityRouter } from './routers/security';
+import { modalitiesRouter } from './routers/modalities';
 
 /**
  * This is the primary router for your server.
@@ -34,6 +35,7 @@ export const appRouter = createTRPCRouter({
   tenant: tenantRouter,
   master: masterRouter,
   security: securityRouter,
+  modalities: modalitiesRouter,
 });
 
 // export type definition of API
