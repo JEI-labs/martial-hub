@@ -1,14 +1,6 @@
 // components/sheetCreateCategory.tsx
+import { FormModal } from '@/components/formModal/formModal.component';
 import React from 'react';
-import { Button } from '@/components/ui/button';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
-import { Separator } from '@/components/ui/separator';
 import { Form } from '@/components/ui/form';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -18,11 +10,11 @@ import { api } from '@/trpc/react';
 import {
   createCategorySchema,
   ICreateCategory,
+  ICreateCategoryInput,
 } from '@/server/validations/categories';
 import { ICreateSheetCategory } from './createCategories.types';
 
 export const SheetCreateCategory: React.FC<ICreateSheetCategory> = ({
-  side,
   isOpen,
   setIsOpen,
   refetch,
@@ -30,7 +22,7 @@ export const SheetCreateCategory: React.FC<ICreateSheetCategory> = ({
   const { toast } = useToast();
   const createCategory = api.category.create.useMutation();
 
-  const form = useForm<ICreateCategory>({
+  const form = useForm<ICreateCategoryInput, unknown, ICreateCategory>({
     resolver: zodResolver(createCategorySchema),
     defaultValues: { name: '', status: 'ACTIVE', description: '' },
     mode: 'onChange',
@@ -54,53 +46,35 @@ export const SheetCreateCategory: React.FC<ICreateSheetCategory> = ({
   };
 
   return (
-    <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent side={side} className="min-w-[30vw] overflow-auto">
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="space-y-6 p-4"
-          >
-            <SheetHeader>
-              <SheetTitle>Nova Categoria</SheetTitle>
-              <SheetDescription>
-                Defina o nome e o status da categoria
-              </SheetDescription>
-            </SheetHeader>
+    <Form {...form}>
+      <FormModal
+        open={isOpen}
+        onOpenChange={setIsOpen}
+        title="Nova categoria"
+        description="Preencha os dados da categoria"
+        onSubmit={form.handleSubmit(onSubmit)}
+        submitLabel="Criar categoria"
+        submitPendingLabel="Salvando..."
+        isSubmitting={createCategory.isPending || form.formState.isSubmitting}
+      >
+        <FormInputComponent
+          control={form.control}
+          name="name"
+          label="Nome"
+          type="text"
+          placeholder="Ex: Mensalidade"
+          maxLength={50}
+        />
 
-            <Separator />
-
-            <FormInputComponent
-              control={form.control}
-              name="name"
-              label="Nome"
-              type="text"
-              placeholder="Ex: Mensalidade"
-              maxLength={50}
-            />
-
-            <FormInputComponent
-              control={form.control}
-              name="description"
-              label="Descrição"
-              type="text"
-              placeholder="Descreva a categoria"
-              maxLength={50}
-            />
-
-            <div className="flex justify-end pt-4">
-              <Button
-                type="submit"
-                disabled={
-                  createCategory.isPending || form.formState.isSubmitting
-                }
-              >
-                {createCategory.isPending ? 'Salvando...' : 'Criar Categoria'}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </SheetContent>
-    </Sheet>
+        <FormInputComponent
+          control={form.control}
+          name="description"
+          label="Descrição"
+          type="text"
+          placeholder="Descreva a categoria"
+          maxLength={50}
+        />
+      </FormModal>
+    </Form>
   );
 };

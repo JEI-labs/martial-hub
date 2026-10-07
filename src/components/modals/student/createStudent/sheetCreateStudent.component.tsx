@@ -1,16 +1,13 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
+import { useEffect } from 'react';
+import { GRADUATION_LIST } from '@/common/constants/graduations';
+import { PLAN_BILLING_LABEL } from '@/common/constants/planBilling';
+import { GraduationBadge } from '@/components/graduationBadge/graduationBadge.component';
+import { FormModal } from '@/components/formModal/formModal.component';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { Form } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { FormInputComponent } from '@/components/forms/formInput/formInput.component';
@@ -28,13 +25,12 @@ import {
   defaultCreateStudentValues,
   IStudentCreateTypes,
 } from '@/server/validations/students';
-import { FormFileInputComponent } from '@/components/forms/formFileInput/formFileInput.component';
 import { blobUrlToBase64 } from '@/common/utils/files';
-import { CameraCaptureButton } from '@/components/camera/camera.component';
+import { AvatarField } from '@/components/forms/avatarField/avatarField.component';
 import { FormSelectComponent } from '@/components/forms/formSelectInput/formSelectInput.component';
+import { getInitials } from '@/utils/masksUtils';
 
 export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
-  side,
   isOpen,
   setIsOpen,
   refetch,
@@ -43,6 +39,7 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
 
   const plansApi = api.plans.getAll.useQuery({ page: 1, limit: 100 });
   const { data: plansData } = plansApi;
+  const defaultPlanId = plansData?.data.find((plan) => plan.isDefault)?.id;
 
   const createUser = api.student.create.useMutation();
   const updateUser = api.student.updateAvatar.useMutation();
@@ -53,6 +50,16 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
     defaultValues: defaultCreateStudentValues,
     mode: 'onChange',
   });
+
+  /* Os planos chegam depois do primeiro render, e o formulário volta ao
+     estado limpo a cada abertura — daí depender das duas coisas. Só preenche
+     se ninguém escolheu nada ainda, para não trocar o plano debaixo de quem
+     já clicou. */
+  useEffect(() => {
+    if (isOpen && defaultPlanId && !form.getValues('planId')) {
+      form.setValue('planId', defaultPlanId, { shouldValidate: true });
+    }
+  }, [isOpen, defaultPlanId, form]);
 
   const onSubmit = async (data: IStudentCreateTypes) => {
     try {
@@ -75,133 +82,150 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
         studentId: userCreated.data.id,
       });
 
+      form.reset(defaultCreateStudentValues);
       setIsOpen(false);
       if (refetch) refetch();
 
       toast({
-        title: 'Sucesso',
-        description: 'Dados atualizados com sucesso',
+        title: 'Aluno criado',
+        description: 'O aluno foi matriculado com sucesso.',
         variant: 'default',
       });
     } catch (error) {
       toast({
         title: 'Erro',
-        description: 'Ocorreu um erro ao atualizar os dados',
+        description: 'Não foi possível criar o aluno.',
         variant: 'destructive',
       });
       console.error(error);
     }
   };
 
+  // useWatch e não form.watch: este é analisável pelo React Compiler
+  const watchedName = useWatch({ control: form.control, name: 'name' });
+  const isSubmitting = createUser.isPending || form.formState.isSubmitting;
+
   return (
-    <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent
-        side={side}
-        className="min-w-[40vw] items-center overflow-auto xl:min-w-[30vw]"
+    <Form {...form}>
+      <FormModal
+        open={isOpen}
+        onOpenChange={setIsOpen}
+        title="Criar novo aluno"
+        description="Preencha os dados abaixo para matricular um aluno."
+        onSubmit={form.handleSubmit(onSubmit)}
+        submitLabel="Criar aluno"
+        submitPendingLabel="Criando aluno..."
+        isSubmitting={isSubmitting}
       >
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)}>
-            <SheetHeader className="mx-2 mb-12 flex">
-              <div className="mb-8 flex flex-col">
-                <SheetTitle className="text-2xl">Criar Novo Aluno</SheetTitle>
-                <SheetDescription className="mt-4 text-sm">
-                  Faça as alterações necessárias para o aluno selecionado abaixo
-                </SheetDescription>
-              </div>
+        <AvatarField
+          control={form.control}
+          name="avatarUrl"
+          fallback={watchedName ? getInitials(watchedName) : undefined}
+        />
 
-              <div className="flex w-full flex-col items-center justify-center gap-2">
-                <FormFileInputComponent
-                  control={form.control}
-                  name="avatarUrl"
-                  label="Imagem do aluno"
-                  type="file"
-                  accept=".jpg, .jpeg, .png"
-                  showPreview
-                />
+        <Separator />
 
-                <CameraCaptureButton
-                  onCapture={(blobUrl) => {
-                    form.setValue('avatarUrl', blobUrl, {
-                      shouldValidate: true,
-                    });
-                  }}
-                />
-              </div>
-            </SheetHeader>
+        <section className="space-y-4">
+          <h3 className="text-muted-foreground text-xs font-medium uppercase">
+            Dados pessoais
+          </h3>
 
-            <Separator />
+          {/* Dois a dois: em uma coluna só o formulário passava da altura da
+              janela e obrigava a rolar para chegar no botão. */}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormInputComponent
+              control={form.control}
+              name="name"
+              label="Nome do aluno"
+              type="text"
+              mask={maskOnlyText}
+              placeholder="Nome completo"
+              maxLength={50}
+            />
 
-            <div className="mx-2 mb-12 mt-8 grid grid-cols-4 items-center gap-8">
-              <div className="col-span-4">
-                <FormInputComponent
-                  control={form.control}
-                  name="name"
-                  label="Nome do aluno"
-                  type="text"
-                  mask={maskOnlyText}
-                  placeholder="Nome completo"
-                  maxLength={50}
-                />
-              </div>
-              <div className="col-span-4">
-                <FormInputComponent
-                  control={form.control}
-                  name="email"
-                  label="Email do aluno"
-                  type="email"
-                  placeholder="exemplo@exemplo.com"
-                  maxLength={50}
-                />
-              </div>
-              <div className="col-span-2">
-                <FormInputComponent
-                  control={form.control}
-                  name="birthDate"
-                  label="Data de nascimento"
-                  type="text"
-                  mask={maskDate}
-                  placeholder="DD/MM/AAAA"
-                  maxLength={10}
-                />
-              </div>
-              <div className="col-span-2">
-                <FormInputComponent
-                  control={form.control}
-                  name="phone"
-                  label="Telefone"
-                  mask={maskCellphone}
-                  unmask={unmaskCellphone}
-                  placeholder="(XX) XXXXX-XXXX"
-                  maxLength={15}
-                />
-              </div>
-              <div className="col-span-4">
-                <FormSelectComponent
-                  control={form.control}
-                  name="planId"
-                  label="Plano"
-                  placeholder="Selecione"
-                  options={[
-                    ...(plansData?.data.map((plan) => ({
-                      value: plan.id,
-                      textValue: plan.name,
-                    })) ?? []),
-                  ]}
-                />
-              </div>
-            </div>
+            <FormInputComponent
+              control={form.control}
+              name="email"
+              label="E-mail"
+              type="email"
+              placeholder="exemplo@exemplo.com"
+              maxLength={50}
+            />
+          </div>
 
-            <div className="flex justify-center md:justify-end">
-              <Button
-                type="submit"
-                disabled={createUser.isPending || form.formState.isSubmitting}
-              >
-                {createUser.isPending ? 'Criando aluno...' : 'Criar aluno'}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </SheetContent>
-    </Sheet>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormInputComponent
+              control={form.control}
+              name="birthDate"
+              label="Data de nascimento"
+              type="text"
+              mask={maskDate}
+              placeholder="DD/MM/AAAA"
+              maxLength={10}
+            />
+
+            <FormInputComponent
+              control={form.control}
+              name="phone"
+              label="Telefone"
+              mask={maskCellphone}
+              unmask={unmaskCellphone}
+              placeholder="(XX) XXXXX-XXXX"
+              maxLength={15}
+            />
+          </div>
+        </section>
+
+        <Separator />
+
+        <section className="space-y-4">
+          <h3 className="text-muted-foreground text-xs font-medium uppercase">
+            Matrícula
+          </h3>
+
+          <FormSelectComponent
+            control={form.control}
+            name="planId"
+            label="Plano"
+            tooltip="Define o valor e a duração da matrícula, e gera as parcelas do aluno."
+            placeholder="Selecione o plano"
+            options={
+              plansData?.data.map((plan) => ({
+                value: plan.id,
+                // preço e duração no rótulo para dar contexto na hora
+                // de escolher; precisa ser string (o Radix usa
+                // textValue para busca por digitação)
+                textValue: `${plan.name} · ${Number(plan.price).toLocaleString(
+                  'pt-BR',
+                  {
+                    style: 'currency',
+                    currency: 'BRL',
+                  },
+                )} · ${plan.duration} ${plan.duration === 1 ? 'mês' : 'meses'} · ${
+                  PLAN_BILLING_LABEL[plan.billing]
+                }`,
+              })) ?? []
+            }
+          />
+
+          <FormSelectComponent
+            control={form.control}
+            name="graduation"
+            label="Graduação"
+            tooltip="Kruang-Prajied do aluno. Pode ficar em branco até a primeira graduação."
+            placeholder="Sem graduação"
+            /* aluno novo entra sem graduação, e dá para voltar a esse estado */
+            hasEmptyOption
+            options={GRADUATION_LIST.map((item) => ({
+              value: item.value,
+              textValue: `${item.degree}º grau · ${item.label}`,
+              icon: (
+                <GraduationBadge graduation={item.value} showLabel={false} />
+              ),
+            }))}
+          />
+        </section>
+      </FormModal>
+    </Form>
   );
 };

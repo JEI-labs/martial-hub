@@ -4,7 +4,31 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+}
+
+/// Situação da academia como cliente do sistema.
+enum ETenantStatus {
+  TRIAL
+  ACTIVE
+  /// Sem acesso: inadimplente ou desligada.
+  SUSPENDED
+  CANCELED
+}
+
+/// O que cada pessoa pode fazer. MASTER é o dono do sistema e não pertence a
+/// nenhuma academia.
+enum EUserRole {
+  MASTER
+  OWNER
+  STAFF
+  TEACHER
+}
+
+enum ETenantInvoiceStatus {
+  OPEN
+  PAID
+  OVERDUE
+  CANCELED
 }
 
 enum PaymentStatus {
@@ -34,57 +58,274 @@ enum EPaymentMethod {
   BOLETO
 }
 
+enum EGraduation {
+  // Kruang-Prajied. A ordem de declaração importa: no Postgres o enum
+  // ordena por ela, então ORDER BY graduation já sai na ordem dos graus.
+  GRAU_1
+  GRAU_2
+  GRAU_3
+  GRAU_4
+  GRAU_5
+  GRAU_6
+  GRAU_7
+  GRAU_8
+  GRAU_9
+  GRAU_10
+  GRAU_11
+}
+
 enum ECategoryStatus {
   ACTIVE
   INACTIVE
 }
 
-model User {
-  id        String   @id @default(uuid())
+/// Uma academia. Tudo que o sistema guarda pertence a uma, e é por aqui que
+/// os dados de uma não encostam nos da outra.
+model Tenant {
+  id        String        @id @default(uuid())
+  /// Nome como a academia se chama, usado no sistema e nas telas do master.
   name      String
-  email     String   @unique
-  password  String
+  /// Vira o subdomínio: "thaiboxe" -> thaiboxe.seusistema.com.br
+  slug      String        @unique
+  status    ETenantStatus @default(TRIAL)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  users    User[]
+  domains  TenantDomain[]
+  branding TenantBranding?
+
+  subscription TenantSubscription?
+  invoices     TenantInvoice[]
+
+  students           Student[]
+  modalities         Modality[]
+  plans              Plan[]
+  categories         Category[]
+  suppliers          Supplier[]
+  financeEntries     FinanceEntry[]
+  promotions         Promotion[]
+  whatsappConfigs    WhatsappConfig[]
+  messageTemplates   MessageTemplate[]
+  messageAutomations MessageAutomation[]
+  messageLogs        MessageLog[]
+  supportAccesses    SupportAccess[]
+
+  @@index([status])
+}
+
+/// Endereços que levam a esta academia: o subdomínio que o sistema cria e os
+/// domínios próprios que o cliente aponta. A resolução do tenant é pelo host,
+/// então o login já sabe de quem é a casa antes de alguém digitar a senha.
+model TenantDomain {
+  id         String    @id @default(uuid())
+  hostname   String    @unique
+  /// O que aparece nos links que o sistema gera.
+  isPrimary  Boolean   @default(false)
+  /// Subdomínio nosso não precisa de verificação; domínio próprio precisa.
+  verifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+/// A cara do sistema para esta academia.
+model TenantBranding {
+  id            String   @id @default(uuid())
+  logoUrl       String?
+  loginImageUrl String?
+  /// Cor principal em HSL sem a função: "9 60% 50%" — é o formato que os
+  /// tokens do tema usam, então entra direto como variável CSS.
+  primaryColor  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tenantId String @unique
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+/// O que a academia paga pelo sistema. Uma por tenant.
+model TenantSubscription {
+  id         String    @id @default(uuid())
+  /// Em centavos, como todo dinheiro do sistema fora de Payment.
+  priceCents Int
+  /// Dia do mês em que a fatura vence.
+  billingDay Int       @default(10)
+  startedAt  DateTime  @default(now())
+  canceledAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  tenantId String @unique
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+/// Fatura da academia para o dono do sistema.
+model TenantInvoice {
+  id          String               @id @default(uuid())
+  amountCents Int
+  dueDate     DateTime
+  paidAt      DateTime?
+  status      ETenantInvoiceStatus @default(OPEN)
+  notes       String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([dueDate])
+}
+
+/// Toda vez que o dono do sistema entra na academia para dar suporte. Acesso
+/// a dado de cliente precisa deixar rastro: quem entrou, onde e quando.
+model SupportAccess {
+  id        String   @id @default(uuid())
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+}
+
+model User {
+  id       String    @id @default(uuid())
+  name     String
+  /// Único dentro da academia, não no sistema inteiro: a mesma pessoa pode
+  /// ter conta em duas academias, e o login resolve pelo host.
+  email    String
+  password String
+  role     EUserRole @default(OWNER)
+
+  /// Segredo TOTP em base32. Nulo enquanto a pessoa não configurou.
+  twoFactorSecret        String?
+  /// Quando a verificação em duas etapas passou a valer para esta conta.
+  twoFactorEnabledAt     DateTime?
+  /// Códigos de recuperação, guardados como hash — servem uma vez cada e são
+  /// a única saída de quem perdeu o celular.
+  twoFactorRecoveryCodes String[]  @default([])
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  /// Nulo só para o MASTER, que é o dono do sistema e não pertence a academia
+  /// nenhuma.
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   FinanceEntry FinanceEntry[]
   Category     Category[]
   Plan         Plan[]
   Student      Student[]
   Supplier     Supplier[]
+
+  promotions         Promotion[]
+  whatsappConfigs    WhatsappConfig[]
+  messageTemplates   MessageTemplate[]
+  messageLogs        MessageLog[]
+  messageAutomations MessageAutomation[]
+  supportAccesses    SupportAccess[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
 }
 
 model Student {
-  id        String    @id @default(uuid())
-  name      String
-  email     String    @unique
-  phone     String
-  avatar    String?
-  birthDate DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id         String       @id @default(uuid())
+  name       String
+  email      String
+  phone      String
+  avatar     String?
+  birthDate  DateTime?
+  // opcional: alunos existentes ficam sem graduação até o professor definir
+  graduation EGraduation?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
 
   enrollments Enrollment[]
   payments    Payment[]
+  messageLogs MessageLog[]
 
-  userId       String
-  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Dono do dado é a academia; isto aqui é só quem cadastrou.
+
+  userId String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tenantId String
+
+  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   FinanceEntry FinanceEntry[]
+
+  /// O mesmo e-mail pode treinar em duas academias; dentro de uma, não.
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+/// O que a academia ensina: muay thai, boxe, jiu-jitsu… Cada academia tem as
+/// suas; o catálogo em `src/common/constants/modalities.ts` é só sugestão.
+model Modality {
+  id        String   @id @default(uuid())
+  /// Como a academia escreve, com acento e maiúscula: "Jiu-Jitsu".
+  name      String
+  /// O nome em minúsculas e sem acento ("jiu-jitsu"). É ele que é único, para
+  /// "Boxe" e "boxe" não virarem duas modalidades.
+  slug      String
+  /// Desativada some das escolhas novas, mas o que já aponta para ela fica.
+  isActive  Boolean  @default(true)
+  /// Ordem em que aparece nas telas, a partir de 0.
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenantId String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, position])
 }
 
 model Plan {
-  id          String   @id @default(uuid())
-  name        String   @unique
+  id          String       @id @default(uuid())
+  name        String
   description String?
+  /// Valor fechado do período inteiro, não da parcela: um trimestral de
+  /// R$ 350,50 custa isso pelos três meses.
   price       Float
   duration    Int // Quantidade de meses
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  /// Mensal divide o preço pelas parcelas; à vista cobra tudo na matrícula.
+  billing     EPlanBilling @default(MONTHLY)
+  /// Plano que já vem escolhido ao matricular. No máximo um por academia —
+  /// a regra é aplicada em transação no router, não por constraint.
+  isDefault   Boolean      @default(false)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
   enrollments Enrollment[]
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Dono do dado é a academia; isto aqui é só quem cadastrou.
+
+  userId String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tenantId String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  /// Dois planos com o mesmo nome na mesma academia confundiriam quem
+  /// matricula; em academias diferentes, não há conflito.
+  @@unique([tenantId, name])
+  @@index([tenantId, isDefault])
 }
 
 model Enrollment {
@@ -102,16 +343,21 @@ model Enrollment {
 }
 
 model Payment {
-  id          String        @id @default(uuid())
-  amount      Decimal
-  paymentDate DateTime      @default(now())
-  dueDate     DateTime
-  status      PaymentStatus @default(PENDING)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id             String        @id @default(uuid())
+  /// Valor cheio da parcela. O recebido é amount - discountAmount.
+  amount         Decimal
+  paymentDate    DateTime      @default(now())
+  dueDate        DateTime
+  status         PaymentStatus @default(PENDING)
+  discountAmount Decimal       @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   studentId String
   student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  promotionId String?
+  promotion   Promotion? @relation(fields: [promotionId], references: [id], onDelete: SetNull)
 }
 
 model Expense {
@@ -143,8 +389,15 @@ model FinanceEntry {
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Dono do dado é a academia; isto aqui é só quem cadastrou.
+
+  userId String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tenantId String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   studentId String?
   student   Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
@@ -152,8 +405,8 @@ model FinanceEntry {
   categoryId String
   category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
-  @@index([userId, date])
-  @@index([userId, status])
+  @@index([tenantId, date])
+  @@index([tenantId, status])
 }
 
 model Category {
@@ -168,8 +421,17 @@ model Category {
   Expense      Expense[]
   FinanceEntry FinanceEntry[]
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Dono do dado é a academia; isto aqui é só quem cadastrou.
+
+  userId String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tenantId String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
 }
 
 model Supplier {
@@ -183,8 +445,201 @@ model Supplier {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Dono do dado é a academia; isto aqui é só quem cadastrou.
+
+  userId String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tenantId String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   expenses Expense[]
+
+  @@index([tenantId])
+}
+
+/// Como o plano é cobrado.
+enum EPlanBilling {
+  /// Uma parcela por mês de duração.
+  MONTHLY
+  /// O período inteiro pago de uma vez, na matrícula.
+  UPFRONT
+}
+
+enum EDiscountType {
+  PERCENTAGE
+  FIXED
+}
+
+enum EWhatsappProvider {
+  ZAPI
+  EVOLUTION
+  META
+}
+
+enum EMessageEvent {
+  PAYMENT_OVERDUE
+  BIRTHDAY
+  EVENT_ANNOUNCEMENT
+  ONE_MONTH_UNPAID
+  PROMOTIONAL
+  /// Lembrete alguns dias antes do vencimento.
+  PAYMENT_DUE_SOON
+  /// Aviso no próprio dia do vencimento.
+  PAYMENT_DUE_TODAY
+}
+
+enum EMessageStatus {
+  SENT
+  FAILED
+}
+
+model Promotion {
+  id            String        @id @default(uuid())
+  name          String
+  description   String?
+  discountType  EDiscountType
+  discountValue Float
+  startsAt      DateTime?
+  endsAt        DateTime?
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  payments Payment[]
+
+  /// Dono do dado é a academia; isto aqui é só quem cadastrou.
+
+  userId String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tenantId String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, isActive])
+}
+
+/// Credenciais do provedor de WhatsApp. O usuário pode cadastrar várias
+/// conexões, mas só uma fica ativa — quem envia é sempre a ativa.
+model WhatsappConfig {
+  id           String            @id @default(uuid())
+  /// Nome dado pelo admin, ex.: "Número da recepção".
+  label        String?
+  provider     EWhatsappProvider
+  baseUrl      String
+  instanceId   String?
+  /// Token do provedor. Nunca é devolvido ao cliente — ver whatsapp.getConfig.
+  token        String
+  senderNumber String
+  isActive     Boolean           @default(false)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  /// Dono do dado é a academia; isto aqui é só quem cadastrou.
+
+  userId String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tenantId String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, isActive])
+}
+
+/// Texto por tipo de evento, com placeholders tipo {{aluno}}.
+model MessageTemplate {
+  id                   String        @id @default(uuid())
+  event                EMessageEvent
+  name                 String
+  /// Texto com {{aluno}}. Na Meta serve de referência: o que vai ao ar é o
+  /// template aprovado, e os placeholders viram parâmetros posicionais.
+  body                 String
+  /// Nome do template aprovado na Meta. Vazio = envio como texto livre,
+  /// que a Meta só aceita dentro da janela de 24h.
+  providerTemplateName String?
+  providerLanguage     String?       @default("pt_BR")
+  isActive             Boolean       @default(true)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  /// Dono do dado é a academia; isto aqui é só quem cadastrou.
+
+  userId String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tenantId String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  logs        MessageLog[]
+  automations MessageAutomation[]
+
+  @@index([tenantId, event])
+}
+
+/// Regra de envio automático por evento. Uma por evento e por usuário.
+model MessageAutomation {
+  id         String           @id @default(uuid())
+  event      EMessageEvent
+  isActive   Boolean          @default(false)
+  /// Dias antes do vencimento (lembrete) ou janela de atraso (cobrança).
+  /// Ignorado no aniversário.
+  offsetDays Int              @default(3)
+  /// Hora do dia em que a rotina pode disparar, no fuso de São Paulo.
+  sendHour   Int              @default(9)
+  /// Modelo usado. Sem ele, a regra fica parada — texto é obrigatório.
+  templateId String?
+  template   MessageTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Dono do dado é a academia; isto aqui é só quem cadastrou.
+
+  userId String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tenantId String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, event])
+}
+
+/// Histórico de envios, para não repetir disparo e para auditoria.
+model MessageLog {
+  id        String         @id @default(uuid())
+  event     EMessageEvent
+  body      String
+  status    EMessageStatus
+  error     String?
+  toNumber  String
+  createdAt DateTime       @default(now())
+
+  studentId String?
+  student   Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+
+  templateId String?
+  template   MessageTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  /// Dono do dado é a academia; isto aqui é só quem cadastrou.
+
+  userId String?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  tenantId String
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([studentId, event, createdAt])
 }

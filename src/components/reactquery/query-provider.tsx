@@ -9,9 +9,9 @@ const queryClient = new QueryClient();
 
 export function QueryProvider({
   children,
-  // eslint-disable-next-line no-unused-vars
+
   ...props
-}: ThemeProviderProps): JSX.Element {
+}: ThemeProviderProps): React.JSX.Element {
   return (
     <QueryClientProvider client={queryClient}> {children}</QueryClientProvider>
   );

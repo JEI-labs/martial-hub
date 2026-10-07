@@ -1,81 +1,206 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+/* Tailwind v4 has no `darkMode: ["class"]` config key; this is its equivalent. */
+@custom-variant dark (&:is(.dark *));
+
+/* globals.css lives in src/styles, so point content detection at the whole app. */
+@source '../';
+
+/*
+ * Tailwind v4 theme. `inline` keeps the values referencing the runtime CSS
+ * variables defined in `:root` / `.dark` below, so theme switching still works.
+ */
+@theme inline {
+  --font-sans:
+    var(--font-geist-sans), ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Noto Sans', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+    'Segoe UI Symbol', 'Noto Color Emoji';
+
+  --shadow-soft: var(--soft-shadow);
+  --shadow-card: var(--card-shadow);
+  --shadow-panel: var(--panel-shadow);
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+  /* `--alert` já existia nos dois temas, mas sem este par o Tailwind não
+     gerava `bg-alert`: quem usava a cor tinha que escrever o hsl na mão. */
+  --color-alert: hsl(var(--alert));
+  --color-alert-foreground: hsl(var(--alert-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-destructive-text: hsl(var(--destructive-text));
+  --color-table-background: hsl(var(--table-background));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+  --color-sidebar: hsl(var(--sidebar-background));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+}
 
 @layer base {
   :root {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
+    /* fundo levemente cinza para o cartão branco ter relevo, como no escuro */
+    --background: 240 10% 97%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    /* vermelho da marca: igual nos dois temas */
     --primary: 9 60% 50%;
-    --primary-foreground: 0 0% 0%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 5% 93%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 5% 93%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 5% 91%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 98%;
-    --alert: 45 60% 40%;
+    --destructive-text: 0 72% 42%;
+    --success: 142 71% 36%;
+    --success-foreground: 0 0% 98%;
+    --alert: 38 92% 45%;
     --alert-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+    --table-background: 0 0% 100%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 9 60% 50%;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 9 60% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
-    --radius: 0.5rem;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 9 60% 50%;
+    --radius: 0.75rem;
+
+    --soft-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+    --card-shadow: 0 2px 8px -2px rgb(0 0 0 / 0.1);
+    --panel-shadow: 4px 0 16px -6px rgb(0 0 0 / 0.14);
   }
 
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
+    --success: 142 64% 45%;
+    --success-foreground: 0 0% 9%;
+    --table-background: 240 3% 19%;
+    /* Grafite em vez de preto: o fundo é o degrau 13%, o cartão 17% e a
+       sidebar 15%. Preto puro com cartão preto não tinha relevo e cansava a
+       vista numa tela cheia de número. O degrau precisa ser largo porque os
+       cartões não têm mais borda: é ele que separa cartão de fundo. */
+    --background: 240 3% 12%;
+    --foreground: 0 0% 95%;
+    /* o cartão fica um degrau acima do fundo: é o que dá o relevo do layout,
+       sem depender de sombra em tela escura */
+    --card: 240 3% 19%;
+    --card-foreground: 0 0% 95%;
+    --popover: 240 3% 19%;
+    --popover-foreground: 0 0% 95%;
     --primary: 9 60% 50%;
-    --primary-foreground: 0 0% 0%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 3% 24%;
+    --secondary-foreground: 0 0% 95%;
+    --muted: 240 3% 24%;
+    --muted-foreground: 240 4% 68%;
+    --accent: 240 3% 26%;
+    --accent-foreground: 0 0% 95%;
+    /* Dois papéis, dois tokens: --destructive é fundo (texto branco por cima,
+       5.5:1) e --destructive-text é o vermelho para TEXTO sobre o escuro. O
+       "Excluir" do menu usava o fundo como texto e dava 1.3:1. */
+    --destructive: 0 62% 48%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-text: 0 80% 72%;
     --alert: 45 60% 40%;
     --alert-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
-    --chart-1: 220 70% 50%;
+    --border: 240 3% 26%;
+    --input: 240 3% 28%;
+    --ring: 9 60% 50%;
+    --chart-1: 9 65% 58%;
     --chart-2: 160 60% 45%;
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-background: 240 3% 15%;
+    --sidebar-foreground: 0 0% 88%;
+    /* item ativo do menu é a pílula da marca, não o azul que vinha do shadcn */
+    --sidebar-primary: 9 60% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-accent: 240 3% 20%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 240 3% 20%;
+    --sidebar-ring: 9 60% 50%;
+
+    /* Preto de 10% não aparece sobre fundo escuro: no escuro a sombra precisa
+       de mais alfa para dar o mesmo efeito de leve relevo. */
+    --soft-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
+    --card-shadow: 0 2px 10px -3px rgb(0 0 0 / 0.4);
+    --panel-shadow: 4px 0 16px -6px rgb(0 0 0 / 0.3);
+  }
+}
+
+@layer base {
+  /*
+   * O preflight do Tailwind 3 dava `cursor: pointer` em button; o 4 passou a
+   * seguir o padrão do navegador (`default`). Restaurado aqui, junto com os
+   * demais papéis clicáveis, para não depender de lembrar a classe em cada
+   * componente novo.
+   */
+  button:not(:disabled),
+  [role='button']:not(:disabled),
+  [role='menuitem'],
+  [role='menuitemcheckbox'],
+  [role='menuitemradio'],
+  [role='option'],
+  [role='tab'],
+  [role='switch'],
+  a[href],
+  label[for],
+  summary,
+  select:not(:disabled),
+  input:where([type='checkbox'], [type='radio'], [type='file']):not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
   }
 }
 

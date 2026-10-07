@@ -9,7 +9,7 @@ export const StyledSwitchComponent = ({
   return (
     <div
       className={cn(
-        'flex w-full items-center justify-between rounded-lg border p-4',
+        'bg-muted/40 flex w-full items-center justify-between rounded-xl p-4',
         props.className,
       )}
     >
@@ -18,7 +18,7 @@ export const StyledSwitchComponent = ({
           <span className="text-sm font-semibold">{props.title}</span>
         )}
         {props.topDescription && (
-          <span className="max-w-[90%] text-sm text-muted-foreground">
+          <span className="text-muted-foreground max-w-[90%] text-sm">
             {props.topDescription}
           </span>
         )}

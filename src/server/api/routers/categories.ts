@@ -1,5 +1,9 @@
 // server/api/routers/category.ts
-import { createTRPCRouter, protectedProcedure } from '@/server/api/trpc';
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  ownerProcedure,
+} from '@/server/api/trpc';
 import { paginationSchema } from '@/server/validations/pagination';
 import {
   createCategorySchema,
@@ -11,10 +15,11 @@ import { ECategoryStatus, Prisma } from '@prisma/client';
 
 export const categoryRouter = createTRPCRouter({
   // --- CREATE ---
-  create: protectedProcedure
+  create: ownerProcedure
     .input(createCategorySchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) {
         throw new TRPCError({
           code: 'UNAUTHORIZED',
@@ -25,7 +30,7 @@ export const categoryRouter = createTRPCRouter({
       // 1) Verifica duplicata para este usuário
       const exists = await ctx.prisma.category.findFirst({
         where: {
-          userId,
+          tenantId,
           name: {
             equals: input.name,
             mode: 'insensitive',
@@ -46,6 +51,7 @@ export const categoryRouter = createTRPCRouter({
           description: input.description,
           status: input.status,
           userId,
+          tenantId,
         },
       });
 
@@ -53,10 +59,11 @@ export const categoryRouter = createTRPCRouter({
     }),
 
   // --- UPDATE ---
-  update: protectedProcedure
+  update: ownerProcedure
     .input(updateCategorySchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) {
         throw new TRPCError({
           code: 'UNAUTHORIZED',
@@ -66,7 +73,7 @@ export const categoryRouter = createTRPCRouter({
 
       // 1) Checa se a categoria existe e pertence ao user
       const current = await ctx.prisma.category.findFirst({
-        where: { id: input.id, userId: userId.toString() },
+        where: { id: input.id, tenantId: tenantId.toString() },
       });
       if (!current) {
         throw new TRPCError({
@@ -78,7 +85,7 @@ export const categoryRouter = createTRPCRouter({
       // 2) Evita conflito de nome com outra categoria do mesmo user
       const conflict = await ctx.prisma.category.findFirst({
         where: {
-          userId,
+          tenantId,
           name: input.name,
           NOT: { id: input.id },
         },
@@ -92,7 +99,7 @@ export const categoryRouter = createTRPCRouter({
 
       // 3) Atualiza
       const updated = await ctx.prisma.category.update({
-        where: { id: input.id },
+        where: { id: input.id, tenantId },
         data: {
           name: input.name,
           status: input.status,
@@ -115,6 +122,7 @@ export const categoryRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
 
       if (!userId) {
         throw new TRPCError({
@@ -128,7 +136,7 @@ export const categoryRouter = createTRPCRouter({
 
       // Monta filtros dinamicamente
       const where: Prisma.CategoryWhereInput = {
-        userId,
+        tenantId,
 
         // filtro de busca por nome
         ...(search ? { name: { contains: search, mode: 'insensitive' } } : {}),
@@ -173,9 +181,9 @@ export const categoryRouter = createTRPCRouter({
   getByID: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       const category = await ctx.prisma.category.findFirst({
-        where: { id: input.id, userId },
+        where: { id: input.id, tenantId },
       });
       if (!category) {
         throw new TRPCError({
@@ -187,12 +195,12 @@ export const categoryRouter = createTRPCRouter({
     }),
 
   // --- DELETE ---
-  delete: protectedProcedure
+  delete: ownerProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       const toDelete = await ctx.prisma.category.findFirst({
-        where: { id: input.id, userId },
+        where: { id: input.id, tenantId },
       });
 
       if (!toDelete) {
@@ -202,7 +210,7 @@ export const categoryRouter = createTRPCRouter({
         });
       }
 
-      await ctx.prisma.category.delete({ where: { id: input.id } });
+      await ctx.prisma.category.delete({ where: { id: input.id, tenantId } });
       return { ok: true, message: 'Categoria excluída com sucesso' };
     }),
 });

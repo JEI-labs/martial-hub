@@ -1,20 +1,15 @@
 'use client';
 
+import { FormModal } from '@/components/formModal/formModal.component';
 import React, { useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { Form } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { FormInputComponent } from '@/components/forms/formInput/formInput.component';
-import { Separator } from '@/components/ui/separator';
+import { FormSelectComponent } from '@/components/forms/formSelectInput/formSelectInput.component';
+import { FormSwitchComponent } from '@/components/forms/formSwitchInput/formSwitchInput.component';
+import { PLAN_BILLING_OPTIONS } from '@/common/constants/planBilling';
 import { api } from '@/trpc/react';
 import { ISheetEditPlan } from './sheetEditPlan.types';
 import {
@@ -23,12 +18,13 @@ import {
 } from '@/server/validations/plans';
 import { maskDecimalWithAcronym, unmaskDecimal } from '@/utils/masksUtils';
 import { maskOnlyNumbersV2 } from '@/common/utils/mask';
+import { EPlanBilling } from '@prisma/client';
 
 export const SheetEditPlan: React.FC<ISheetEditPlan> = ({
-  side,
   isOpen,
   setIsOpen,
   planId,
+  onDelete,
   refetch,
 }) => {
   const { toast } = useToast();
@@ -51,6 +47,8 @@ export const SheetEditPlan: React.FC<ISheetEditPlan> = ({
       description: '',
       price: '0',
       duration: '1',
+      billing: EPlanBilling.MONTHLY,
+      isDefault: false,
     },
     mode: 'onChange',
   });
@@ -64,11 +62,11 @@ export const SheetEditPlan: React.FC<ISheetEditPlan> = ({
         description: plan.description ?? '',
         price: (Number(plan.price) * 100).toString(),
         duration: plan.duration.toString(),
+        billing: plan.billing,
+        isDefault: plan.isDefault,
       });
     }
   }, [planQuery.data, form]);
-
-  console.log(planQuery.data?.data.price);
 
   const onSubmit = async (data: IUpdatePlanSchema) => {
     try {
@@ -93,77 +91,82 @@ export const SheetEditPlan: React.FC<ISheetEditPlan> = ({
   };
 
   return (
-    <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent
-        side={side}
-        className="min-w-[40vw] items-center overflow-auto xl:min-w-[30vw]"
+    <Form {...form}>
+      <FormModal
+        open={isOpen}
+        onOpenChange={setIsOpen}
+        title="Editar plano"
+        description="Altere os dados do plano"
+        onSubmit={form.handleSubmit(onSubmit)}
+        onDelete={onDelete}
+        submitLabel="Salvar alterações"
+        submitPendingLabel="Salvando..."
+        isSubmitting={updatePlan.isPending || form.formState.isSubmitting}
       >
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="w-full">
-            <SheetHeader className="mx-2 mb-8 flex flex-col items-center">
-              <SheetTitle className="text-2xl">Editar Plano</SheetTitle>
-              <SheetDescription className="mt-2 text-center text-sm">
-                Faça as alterações necessárias para o plano selecionado
-              </SheetDescription>
-            </SheetHeader>
-
-            <Separator />
-
-            <div className="mx-2 my-8 grid w-full grid-cols-4 gap-6">
-              <div className="col-span-4">
-                <FormInputComponent
-                  control={form.control}
-                  name="name"
-                  label="Nome"
-                  type="text"
-                  placeholder="Nome do plano"
-                  maxLength={50}
-                />
-              </div>
-              <div className="col-span-4">
-                <FormInputComponent
-                  control={form.control}
-                  name="description"
-                  label="Descrição"
-                  type="text"
-                  placeholder="(opcional)"
-                  maxLength={50}
-                />
-              </div>
-              <div className="col-span-2">
-                <FormInputComponent
-                  control={form.control}
-                  name="price"
-                  label="Preço (R$)"
-                  placeholder="0.00"
-                  mask={maskDecimalWithAcronym}
-                  unmask={unmaskDecimal}
-                  maxLength={10}
-                />
-              </div>
-              <div className="col-span-2">
-                <FormInputComponent
-                  control={form.control}
-                  name="duration"
-                  label="Duração (meses)"
-                  placeholder="1"
-                  mask={maskOnlyNumbersV2}
-                  min={1}
-                />
-              </div>
-            </div>
-
-            <div className="mb-4 flex w-full justify-end">
-              <Button
-                type="submit"
-                disabled={updatePlan.isPending || form.formState.isSubmitting}
-              >
-                {updatePlan.isPending ? 'Editando plano...' : 'Editar plano'}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </SheetContent>
-    </Sheet>
+        <div className="grid grid-cols-4 gap-6">
+          <div className="col-span-4">
+            <FormInputComponent
+              control={form.control}
+              name="name"
+              label="Nome"
+              type="text"
+              placeholder="Nome do plano"
+              maxLength={50}
+            />
+          </div>
+          <div className="col-span-4">
+            <FormInputComponent
+              control={form.control}
+              name="description"
+              label="Descrição"
+              type="text"
+              placeholder="(opcional)"
+              maxLength={50}
+            />
+          </div>
+          <div className="col-span-2">
+            <FormInputComponent
+              control={form.control}
+              name="price"
+              label="Preço do período (R$)"
+              tooltip="Valor cheio do período, não o da parcela. Um trimestral de R$ 350,50 custa isso pelos três meses — na cobrança mensal o sistema divide em três."
+              placeholder="0.00"
+              mask={maskDecimalWithAcronym}
+              unmask={unmaskDecimal}
+              maxLength={10}
+            />
+          </div>
+          <div className="col-span-2">
+            <FormInputComponent
+              control={form.control}
+              name="duration"
+              label="Duração (meses)"
+              tooltip="Por quantos meses a matrícula vale."
+              placeholder="1"
+              mask={maskOnlyNumbersV2}
+              min={1}
+            />
+          </div>
+          <div className="col-span-2">
+            <FormSelectComponent
+              control={form.control}
+              name="billing"
+              label="Cobrança"
+              tooltip="Mensal gera uma parcela por mês. À vista gera uma parcela só, paga na matrícula. Vale para as próximas matrículas; as que já existem seguem como foram criadas."
+              placeholder="Como o aluno paga"
+              options={PLAN_BILLING_OPTIONS}
+            />
+          </div>
+          <div className="col-span-2">
+            <FormSwitchComponent
+              control={form.control}
+              name="isDefault"
+              title="Plano padrão"
+              bottomDescription="Vem escolhido sozinho ao matricular um aluno. Só um plano pode ser o padrão: marcar este tira o anterior."
+            />
+          </div>
+        </div>
+      </FormModal>
+    </Form>
   );
 };

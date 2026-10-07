@@ -1,7 +1,6 @@
 import { ICreateFinanceEntry } from '@/server/validations/finance';
 
 export interface IEditExpenses {
-  side: 'right' | 'bottom';
   isOpen: boolean;
   setIsOpen: (_open: boolean) => void;
   entry: ICreateFinanceEntry & { id: string };

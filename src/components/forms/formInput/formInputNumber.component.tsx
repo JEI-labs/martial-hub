@@ -1,6 +1,10 @@
 import React from 'react';
 
-import type { FieldValues, UseControllerProps } from 'react-hook-form';
+import type {
+  FieldPath,
+  FieldValues,
+  UseControllerProps,
+} from 'react-hook-form';
 import { Controller } from 'react-hook-form';
 
 import { Minus, Plus } from 'lucide-react';
@@ -17,7 +21,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 
-export const FormInputNumberComponent = <T extends FieldValues>({
+export const FormInputNumberComponent = <
+  T extends FieldValues,
+  TTransformed = T,
+>({
   control,
   name,
   description,
@@ -26,7 +33,8 @@ export const FormInputNumberComponent = <T extends FieldValues>({
   unmask,
   hideErrors,
   ...props
-}: UseControllerProps<T> & FormInputComponentProps): React.JSX.Element => {
+}: UseControllerProps<T, FieldPath<T>, TTransformed> &
+  FormInputComponentProps): React.JSX.Element => {
   const handleRemoveMask = (value: string): string => {
     if (unmask) {
       return unmask(value).toString();
@@ -60,7 +68,7 @@ export const FormInputNumberComponent = <T extends FieldValues>({
                     <Button
                       type="button"
                       variant="secondary"
-                      className="rounded-ee-none rounded-se-none border"
+                      className="rounded-se-none rounded-ee-none border"
                       onClick={() => {
                         field.onChange(
                           (parseInt(field.value, 10) - 1 >= 0
@@ -97,7 +105,7 @@ export const FormInputNumberComponent = <T extends FieldValues>({
                     <Button
                       type="button"
                       variant="secondary"
-                      className="rounded-es-none rounded-ss-none border"
+                      className="rounded-ss-none rounded-es-none border"
                       onClick={() => {
                         field.onChange(
                           (parseInt(field.value, 10) + 1).toString(),

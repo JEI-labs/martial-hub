@@ -21,4 +21,6 @@ export interface FormSelectComponentProps {
   hasEmptyOption?: boolean;
   className?: string;
   description?: string;
+  /** Texto de ajuda mostrado num tooltip ao lado do rótulo. */
+  tooltip?: string;
 }

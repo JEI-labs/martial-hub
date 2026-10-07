@@ -1,184 +1,114 @@
 'use client';
 
-import {
-  BarChart2,
-  Boxes,
-  DollarSign,
-  // LayoutDashboard,
-  Package,
-  ReceiptCentIcon,
-  ReceiptText,
-  Settings,
-  Users,
-  UserSquare,
-} from 'lucide-react';
+import { Boxes, LayoutDashboard, ReceiptText, Users } from 'lucide-react';
+/* Glifo da marca vem do react-icons, que já é dependência: desenhar logo de
+   memória sai errado. */
+import { FaWhatsapp } from 'react-icons/fa';
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
 } from '@/components/ui/sidebar';
-import { MdCategory } from 'react-icons/md';
 
+import type { EUserRole } from '@prisma/client';
 import Image from 'next/image';
-import { cn } from '@/lib/utils';
+
+import { ROLE_SECTIONS } from '@/common/constants/roles';
+import { LogoPlaceholder } from '@/components/brand/brandPlaceholders.component';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
-import { Separator } from '../ui/separator';
 
 interface SidebarItem {
   title: string;
   url: string;
   icon: React.ElementType;
 }
-interface SidebarRootItem {
-  title: string;
-  icon: React.ElementType;
-  url?: string;
-  items?: Array<SidebarItem>;
+
+/**
+ * Quatro destinos, e só. Financeiro e Cadastros abrem uma tela-índice com os
+ * seus assuntos: a lista inteira aberta na lateral virava um paredão de links
+ * que ninguém lia.
+ */
+const sidebarItems: Array<SidebarItem> = [
+  { title: 'Dashboard', url: '/painel', icon: LayoutDashboard },
+  { title: 'Alunos', url: '/alunos', icon: Users },
+  { title: 'Financeiro', url: '/financeiro', icon: ReceiptText },
+  { title: 'Cadastros', url: '/cadastros', icon: Boxes },
+  { title: 'WhatsApp', url: '/whatsapp', icon: FaWhatsapp },
+];
+
+const MENU_BUTTON = 'h-11 gap-3 px-4 text-base [&>svg]:size-5';
+
+interface AppSidebarProps {
+  /** Marca da academia; sem ela, a do sistema. */
+  logoUrl?: string | null;
+  tenantName?: string | null;
+  role?: EUserRole;
 }
 
-const registrationsItems = [
-  {
-    title: 'Fornecedores',
-    url: '/registrations/suppliers',
-    icon: UserSquare,
-  },
-  {
-    title: 'Planos',
-    url: '/registrations/plans',
-    icon: Package,
-  },
-  {
-    title: 'Categorias',
-    url: '/registrations/categories',
-    icon: MdCategory,
-  },
-];
-
-const financialItems = [
-  {
-    title: 'Resumo',
-    url: '/financial/summary',
-    icon: BarChart2,
-  },
-  {
-    title: 'Receitas',
-    url: '/financial/revenues',
-    icon: DollarSign,
-  },
-  {
-    title: 'Despesas',
-    url: '/financial/expenses',
-    icon: ReceiptCentIcon,
-  },
-];
-
-const footerItems: Array<SidebarItem> = [
-  {
-    title: 'Configurações',
-    url: '/settings',
-    icon: Settings,
-  },
-];
-
-const sidebarItems: Array<SidebarRootItem> = [
-  // {
-  //   title: 'Dashboard',
-  //   icon: LayoutDashboard,
-  //   url: '/dashboard',
-  // },
-  {
-    title: 'Alunos',
-    url: '/students',
-    icon: Users,
-  },
-  {
-    title: 'Financeiro',
-    icon: ReceiptText,
-    items: financialItems,
-  },
-  {
-    title: 'Cadastros',
-    icon: Boxes,
-    items: registrationsItems,
-  },
-];
-
-export function AppSidebar() {
+export function AppSidebar({ logoUrl, tenantName, role }: AppSidebarProps) {
   const path = usePathname();
+  /* Fora de uma academia (área do master) vale a marca do sistema; dentro de
+     uma que ainda não enviou a dela, o lugar fica reservado. */
+  const logo = tenantName ? logoUrl : '/images/logo.png';
+
+  /* Menu que leva a uma tela proibida é só frustração: o professor não vê
+     Financeiro, a recepção não vê Cadastros. O servidor recusa de qualquer
+     jeito; isto é para não oferecer. */
+  const permitidos = role ? ROLE_SECTIONS[role] : null;
+  const itens = permitidos
+    ? sidebarItems.filter((item) => permitidos.includes(item.url))
+    : sidebarItems;
 
   return (
     <Sidebar>
       <SidebarHeader>
-        <div className="jutify-center flex h-24 w-full items-center p-6">
-          <Image src="/images/logo.png" alt="Logo" width={300} height={300} />
+        {/* o nome vai no alt: some da tela, mas segue no leitor de tela */}
+        <div className="flex h-28 w-full items-center px-4">
+          {logo ? (
+            <Image
+              src={logo}
+              alt={tenantName ?? 'Team Sartorato'}
+              width={300}
+              height={300}
+              /* logo do cliente mora no Blob, fora do projeto: o otimizador do
+                 Next não conhece esse host */
+              unoptimized={logo.startsWith('http')}
+              className="h-20 w-auto object-contain"
+            />
+          ) : (
+            <LogoPlaceholder className="h-14 w-full" />
+          )}
         </div>
-        <p className="text-center font-bold">Team Sartorato</p>
       </SidebarHeader>
-
-      <Separator />
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarMenu>
-            {sidebarItems.map((item) => (
+          <SidebarMenu className="gap-1">
+            {itens.map((item) => (
               <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton asChild>
-                  <Link href={item.url ?? ''} className="cursor-pointer py-5">
-                    {item.icon && <item.icon />}
-                    <span className="text-md font-normal">{item.title}</span>
+                <SidebarMenuButton
+                  asChild
+                  /* as telas de dentro mantêm o assunto aceso no menu */
+                  isActive={
+                    path === item.url || path.startsWith(`${item.url}/`)
+                  }
+                  className={MENU_BUTTON}
+                >
+                  <Link href={item.url} className="cursor-pointer">
+                    <item.icon />
+                    <span className="font-normal">{item.title}</span>
                   </Link>
                 </SidebarMenuButton>
-
-                {Array.isArray(item.items) && item.items.length > 0 && (
-                  <SidebarMenuSub>
-                    {item.items.map((subItem) => (
-                      <SidebarMenuButton
-                        asChild
-                        key={subItem.title}
-                        className={cn(
-                          path === subItem.url
-                            ? 'bg-accent'
-                            : 'transparent text-muted-foreground',
-                        )}
-                      >
-                        <Link
-                          className={cn(
-                            'flex items-center gap-4 rounded-lg px-3 py-1.5',
-                          )}
-                          href={subItem.url}
-                        >
-                          {subItem.icon && <subItem.icon />}
-                          <span>{subItem.title}</span>
-                        </Link>
-                      </SidebarMenuButton>
-                    ))}
-                  </SidebarMenuSub>
-                )}
               </SidebarMenuItem>
             ))}
           </SidebarMenu>
         </SidebarGroup>
       </SidebarContent>
-
-      <SidebarFooter>
-        {footerItems.map((item) => (
-          <SidebarMenuItem key={item.title}>
-            <SidebarMenuButton asChild className="py-5">
-              <a href={item.url}>
-                <item.icon />
-                <span>{item.title}</span>
-              </a>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        ))}
-      </SidebarFooter>
     </Sidebar>
   );
 }

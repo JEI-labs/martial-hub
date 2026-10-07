@@ -10,7 +10,7 @@ export const LoadingContent: React.FC<LoadingContentProps> = ({
 }) => {
   return (
     <div className="flex h-full flex-col items-center justify-center">
-      <Loader2 className="mb-2 h-6 w-6 animate-spin text-success" />
+      <Loader2 className="text-success mb-2 h-6 w-6 animate-spin" />
       <span className="text-muted-foreground">
         {textLoading || 'Carregando...'}
       </span>

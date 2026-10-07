@@ -1,19 +1,22 @@
 import * as React from 'react';
 
-export function useMediaQuery(query: string) {
-  const [value, setValue] = React.useState(false);
+/**
+ * Subscribing through useSyncExternalStore rather than syncing into state from
+ * an effect: no cascading render, and the value is correct on first paint.
+ */
+export function useMediaQuery(query: string): boolean {
+  const subscribe = React.useCallback(
+    (onStoreChange: () => void) => {
+      const result = matchMedia(query);
+      result.addEventListener('change', onStoreChange);
+      return () => result.removeEventListener('change', onStoreChange);
+    },
+    [query],
+  );
 
-  React.useEffect(() => {
-    function onChange(event: MediaQueryListEvent) {
-      setValue(event.matches);
-    }
-
-    const result = matchMedia(query);
-    result.addEventListener('change', onChange);
-    setValue(result.matches);
-
-    return () => result.removeEventListener('change', onChange);
-  }, [query]);
-
-  return value;
+  return React.useSyncExternalStore(
+    subscribe,
+    () => matchMedia(query).matches,
+    () => false, // server render has no viewport; matches the old initial value
+  );
 }

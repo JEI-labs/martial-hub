@@ -1,5 +1,9 @@
 // server/api/routers/supplier.ts
-import { createTRPCRouter, protectedProcedure } from '@/server/api/trpc';
+import {
+  createTRPCRouter,
+  protectedProcedure,
+  ownerProcedure,
+} from '@/server/api/trpc';
 import { paginationSchema } from '@/server/validations/pagination';
 import {
   createSupplierSchema,
@@ -11,10 +15,11 @@ import { Prisma } from '@prisma/client';
 
 export const supplierRouter = createTRPCRouter({
   // --- CREATE ---
-  create: protectedProcedure
+  create: ownerProcedure
     .input(createSupplierSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) {
         throw new TRPCError({
           code: 'UNAUTHORIZED',
@@ -24,7 +29,7 @@ export const supplierRouter = createTRPCRouter({
 
       // Verifica duplicata de nome
       const exists = await ctx.prisma.supplier.findFirst({
-        where: { userId, name: input.name },
+        where: { tenantId, name: input.name },
       });
       if (exists) {
         throw new TRPCError({
@@ -37,6 +42,7 @@ export const supplierRouter = createTRPCRouter({
         data: {
           ...input,
           userId,
+          tenantId,
         },
       });
 
@@ -44,10 +50,11 @@ export const supplierRouter = createTRPCRouter({
     }),
 
   // --- UPDATE ---
-  update: protectedProcedure
+  update: ownerProcedure
     .input(updateSupplierSchema)
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) {
         throw new TRPCError({
           code: 'UNAUTHORIZED',
@@ -57,7 +64,7 @@ export const supplierRouter = createTRPCRouter({
 
       // Checa existência e pertencimento
       const current = await ctx.prisma.supplier.findFirst({
-        where: { id: input.id, userId },
+        where: { id: input.id, tenantId },
       });
       if (!current) {
         throw new TRPCError({
@@ -69,7 +76,7 @@ export const supplierRouter = createTRPCRouter({
       // Evita conflito de nome com outro registro
       const conflict = await ctx.prisma.supplier.findFirst({
         where: {
-          userId,
+          tenantId,
           name: input.name,
           NOT: { id: input.id },
         },
@@ -82,7 +89,7 @@ export const supplierRouter = createTRPCRouter({
       }
 
       const updated = await ctx.prisma.supplier.update({
-        where: { id: input.id },
+        where: { id: input.id, tenantId },
         data: {
           name: input.name,
           phone: input.phone,
@@ -105,6 +112,7 @@ export const supplierRouter = createTRPCRouter({
     )
     .query(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
       if (!userId) {
         throw new TRPCError({
           code: 'UNAUTHORIZED',
@@ -116,7 +124,7 @@ export const supplierRouter = createTRPCRouter({
       const skip = (page - 1) * limit;
 
       const where: Prisma.SupplierWhereInput = {
-        userId,
+        tenantId,
         ...(search
           ? {
               name: {
@@ -159,8 +167,10 @@ export const supplierRouter = createTRPCRouter({
   getByID: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ ctx, input }) => {
+      const { tenantId } = ctx;
+
       const supplier = await ctx.prisma.supplier.findFirst({
-        where: { id: input.id, userId: ctx.session.user.id },
+        where: { id: input.id, tenantId },
       });
       if (!supplier) {
         throw new TRPCError({
@@ -172,11 +182,13 @@ export const supplierRouter = createTRPCRouter({
     }),
 
   // --- DELETE ---
-  delete: protectedProcedure
+  delete: ownerProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(async ({ ctx, input }) => {
+      const { tenantId } = ctx;
+
       const toDelete = await ctx.prisma.supplier.findFirst({
-        where: { id: input.id, userId: ctx.session.user.id },
+        where: { id: input.id, tenantId },
       });
       if (!toDelete) {
         throw new TRPCError({
@@ -185,7 +197,7 @@ export const supplierRouter = createTRPCRouter({
         });
       }
 
-      await ctx.prisma.supplier.delete({ where: { id: input.id } });
+      await ctx.prisma.supplier.delete({ where: { id: input.id, tenantId } });
       return { ok: true, message: 'Fornecedor excluído com sucesso' };
     }),
 });

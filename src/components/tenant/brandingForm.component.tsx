@@ -1,0 +1,395 @@
+'use client';
+
+import { useRef, useState } from 'react';
+import Image from 'next/image';
+import { ImageIcon, ImageUp, Loader2, Trash2 } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
+import { CopyButton } from '@/components/ui/copy-button';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import { api } from '@/trpc/react';
+import { blobUrlToBase64 } from '@/common/utils/files';
+import { hexToHslTriple, hslTripleToHex } from '@/utils/colorUtils';
+import { ThemePreview } from '@/components/tenant/themePreview.component';
+
+/** Cores prontas, para quem não quer abrir o seletor. */
+const SUGESTOES = [
+  { nome: 'Terracota', hsl: '9 60% 50%' },
+  { nome: 'Vermelho', hsl: '0 72% 48%' },
+  { nome: 'Carmim', hsl: '345 75% 45%' },
+  { nome: 'Rosa', hsl: '330 80% 58%' },
+  { nome: 'Roxo', hsl: '275 65% 55%' },
+  { nome: 'Violeta', hsl: '255 70% 58%' },
+  { nome: 'Azul', hsl: '221 83% 53%' },
+  { nome: 'Azul-marinho', hsl: '220 70% 35%' },
+  { nome: 'Ciano', hsl: '190 80% 42%' },
+  { nome: 'Esmeralda', hsl: '172 70% 36%' },
+  { nome: 'Verde', hsl: '142 70% 38%' },
+  { nome: 'Verde-limão', hsl: '95 60% 40%' },
+  { nome: 'Oliva', hsl: '75 50% 35%' },
+  { nome: 'Âmbar', hsl: '38 92% 48%' },
+  { nome: 'Laranja', hsl: '25 85% 50%' },
+  { nome: 'Marrom', hsl: '20 45% 35%' },
+  { nome: 'Grafite', hsl: '240 6% 32%' },
+  { nome: 'Chumbo', hsl: '215 20% 35%' },
+];
+
+type CampoImagem = 'logoUrl' | 'loginImageUrl';
+
+export function BrandingForm() {
+  const { toast } = useToast();
+  const utils = api.useUtils();
+
+  const { data: tenant, isLoading } = api.tenant.getCurrent.useQuery();
+
+  const [name, setName] = useState<string | null>(null);
+  const [logoUrl, setLogoUrl] = useState<string | null | undefined>(undefined);
+  const [loginImageUrl, setLoginImageUrl] = useState<string | null | undefined>(
+    undefined,
+  );
+  const [primaryColor, setPrimaryColor] = useState<string | null | undefined>(
+    undefined,
+  );
+  const [enviando, setEnviando] = useState<CampoImagem | null>(null);
+
+  const upload = api.files.upload.useMutation();
+  const salvar = api.tenant.saveBranding.useMutation({
+    onSuccess: () => {
+      toast({
+        title: 'Marca atualizada',
+        description: 'A tela de login e o sistema já estão com o visual novo.',
+      });
+      utils.tenant.getCurrent.invalidate();
+    },
+    onError: (error) =>
+      toast({
+        title: 'Não deu para salvar',
+        description: error.message,
+        variant: 'destructive',
+      }),
+  });
+
+  /* Os valores vivem no estado só depois que alguém mexe; antes disso, quem
+     manda é o que veio do banco. Assim a tela não precisa esperar o load para
+     montar nem perde o que foi digitado quando a query revalida. */
+  const valorNome = name ?? tenant?.name ?? '';
+  const valorLogo =
+    logoUrl === undefined ? (tenant?.branding?.logoUrl ?? null) : logoUrl;
+  const valorLogin =
+    loginImageUrl === undefined
+      ? (tenant?.branding?.loginImageUrl ?? null)
+      : loginImageUrl;
+  const valorCor =
+    primaryColor === undefined
+      ? (tenant?.branding?.primaryColor ?? null)
+      : primaryColor;
+
+  const enviarImagem = async (campo: CampoImagem, arquivo: File) => {
+    setEnviando(campo);
+    try {
+      const objectUrl = URL.createObjectURL(arquivo);
+      const base64 = await blobUrlToBase64(objectUrl);
+      URL.revokeObjectURL(objectUrl);
+
+      const blob = await upload.mutateAsync({
+        filename: `${campo}-${Date.now()}-${arquivo.name}`,
+        file: base64,
+      });
+
+      if (campo === 'logoUrl') setLogoUrl(blob.url);
+      else setLoginImageUrl(blob.url);
+    } catch (error) {
+      toast({
+        title: 'Não deu para enviar a imagem',
+        description: error instanceof Error ? error.message : undefined,
+        variant: 'destructive',
+      });
+    } finally {
+      setEnviando(null);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Skeleton className="h-48 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Identidade</CardTitle>
+          <CardDescription>
+            O nome aparece na tela de login e nas mensagens do sistema.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="flex flex-col gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="nome-academia">Nome da academia</Label>
+            <Input
+              id="nome-academia"
+              value={valorNome}
+              maxLength={80}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </div>
+
+          {tenant?.domains.length ? (
+            <div className="space-y-2">
+              <Label>Endereços</Label>
+              <p className="text-muted-foreground text-xs">
+                É por aqui que a sua equipe e os seus alunos entram.
+              </p>
+
+              <div className="flex flex-col gap-2">
+                {tenant.domains.map((dominio) => (
+                  <div
+                    key={dominio.hostname}
+                    className="bg-muted/60 flex flex-wrap items-center gap-3 rounded-xl px-3 py-2"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      {dominio.hostname}
+                      <span className="text-muted-foreground">
+                        {dominio.isPrimary && ' · principal'}
+                        {!dominio.verifiedAt && ' · aguardando DNS'}
+                      </span>
+                    </span>
+
+                    <CopyButton value={`https://${dominio.hostname}`} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Imagens</CardTitle>
+          <CardDescription>
+            PNG ou JPG, até 4,5 MB. Sem imagem, o sistema usa a sua própria.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <CampoDeImagem
+            titulo="Logo"
+            vazio="Sua logo"
+            ajuda="Aparece no topo da barra lateral e acima do formulário de login. Fundo transparente fica melhor."
+            url={valorLogo}
+            enviando={enviando === 'logoUrl'}
+            onPick={(arquivo) => enviarImagem('logoUrl', arquivo)}
+            onClear={() => setLogoUrl(null)}
+            className="bg-sidebar h-28"
+            contain
+          />
+
+          <CampoDeImagem
+            titulo="Imagem do login"
+            vazio="Sua imagem de login aqui"
+            ajuda="Ocupa a metade esquerda da tela de entrada. Horizontal, de preferência a partir de 1600px."
+            url={valorLogin}
+            enviando={enviando === 'loginImageUrl'}
+            onPick={(arquivo) => enviarImagem('loginImageUrl', arquivo)}
+            onClear={() => setLoginImageUrl(null)}
+            className="h-28"
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Cor principal</CardTitle>
+          <CardDescription>
+            Dela saem o fundo, os cartões e a barra lateral — a prévia mostra
+            como fica nos dois temas.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-wrap gap-2">
+            {SUGESTOES.map((sugestao) => (
+              <button
+                key={sugestao.hsl}
+                type="button"
+                title={sugestao.nome}
+                onClick={() => setPrimaryColor(sugestao.hsl)}
+                style={{ backgroundColor: `hsl(${sugestao.hsl})` }}
+                className={cn(
+                  'size-9 rounded-full transition-transform',
+                  valorCor === sugestao.hsl
+                    ? 'ring-foreground scale-110 ring-2 ring-offset-2'
+                    : 'hover:scale-105',
+                )}
+              >
+                <span className="sr-only">{sugestao.nome}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="cor">Outra cor</Label>
+              <input
+                id="cor"
+                type="color"
+                value={hslTripleToHex(valorCor)}
+                onChange={(event) =>
+                  setPrimaryColor(hexToHslTriple(event.target.value))
+                }
+                className="border-border h-10 w-16 cursor-pointer rounded-xl border bg-transparent p-1"
+              />
+            </div>
+
+            {valorCor && (
+              <Button
+                variant="ghost"
+                onClick={() => setPrimaryColor(null)}
+                className="text-muted-foreground"
+              >
+                Voltar ao padrão
+              </Button>
+            )}
+          </div>
+
+          {/* Miniatura do sistema de verdade: a cor escolhida vira a paleta
+              inteira ali dentro, sem mexer no tema de quem está olhando. */}
+          <ThemePreview primaryColor={valorCor} />
+        </CardContent>
+      </Card>
+
+      <div className="flex justify-end">
+        <Button
+          disabled={salvar.isPending || valorNome.trim().length < 2}
+          onClick={() =>
+            salvar.mutate({
+              name: valorNome.trim(),
+              logoUrl: valorLogo,
+              loginImageUrl: valorLogin,
+              primaryColor: valorCor,
+            })
+          }
+        >
+          {salvar.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
+          Salvar
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function CampoDeImagem({
+  titulo,
+  ajuda,
+  vazio,
+  url,
+  enviando,
+  onPick,
+  onClear,
+  className,
+  contain,
+}: {
+  titulo: string;
+  ajuda: string;
+  /** O que o lugar mostra enquanto está vazio — o mesmo texto do sistema. */
+  vazio: string;
+  url: string | null;
+  enviando: boolean;
+  onPick: (_arquivo: File) => void;
+  onClear: () => void;
+  className?: string;
+  contain?: boolean;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Label>{titulo}</Label>
+
+      <div
+        className={cn(
+          'bg-muted/60 flex items-center justify-center overflow-hidden rounded-xl',
+          className,
+        )}
+      >
+        {enviando ? (
+          <Loader2 className="text-muted-foreground size-5 animate-spin" />
+        ) : url ? (
+          <Image
+            src={url}
+            alt={titulo}
+            width={640}
+            height={240}
+            unoptimized
+            className={cn(
+              'h-full w-full',
+              contain ? 'object-contain p-2' : 'object-cover',
+            )}
+          />
+        ) : (
+          <span className="text-muted-foreground flex items-center gap-2 text-xs">
+            <ImageIcon className="size-4" aria-hidden />
+            {vazio}
+          </span>
+        )}
+      </div>
+
+      <p className="text-muted-foreground text-xs">{ajuda}</p>
+
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={enviando}
+          onClick={() => input.current?.click()}
+        >
+          <ImageUp className="mr-2 size-4" />
+          {url ? 'Trocar' : 'Enviar'}
+        </Button>
+
+        {url && (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="text-destructive-text"
+            onClick={onClear}
+          >
+            <Trash2 className="mr-2 size-4" />
+            Remover
+          </Button>
+        )}
+      </div>
+
+      <input
+        ref={input}
+        type="file"
+        accept=".png,.jpg,.jpeg,.webp"
+        className="hidden"
+        onChange={(event) => {
+          const arquivo = event.target.files?.[0];
+          if (arquivo) onPick(arquivo);
+          event.target.value = '';
+        }}
+      />
+    </div>
+  );
+}

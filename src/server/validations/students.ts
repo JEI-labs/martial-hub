@@ -1,12 +1,14 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
+import { EGraduation } from '@prisma/client';
 import { z } from 'zod';
 
 export const createStudentSchema = z.object({
   name: z.string().min(1, 'Por favor, insira um nome válido.'),
   email: z.string().email('Por favor, insira um endereço de email válido.'),
   phone: z.string().min(10, 'Por favor, insira um telefone válido'),
-  planId: z.string().uuid(),
+  planId: z.string().uuid('Selecione um plano'),
   avatarUrl: z.string().nullable(),
+  // opcional: nem todo aluno novo já tem graduação definida
+  graduation: z.nativeEnum(EGraduation).nullable().optional(),
   birthDate: z.string().superRefine((val, ctx) => {
     if (!val || val.trim() === '') {
       ctx.addIssue({
@@ -62,5 +64,6 @@ export const defaultCreateStudentValues = {
   phone: '',
   avatarUrl: '',
   planId: '',
+  graduation: null,
   birthDate: undefined,
 };

@@ -1,6 +1,5 @@
 'use client';
 
-/* eslint-disable react/require-default-props */
 import React from 'react';
 import Link from 'next/link';
 import {
@@ -22,7 +21,7 @@ type Props = {
   className?: string;
 };
 
-export function BreadcrumbContainer({ className }: Props): JSX.Element {
+export function BreadcrumbContainer({ className }: Props): React.JSX.Element {
   const { breadcrumbItems } = useBreadcrumb();
 
   return (

@@ -13,7 +13,7 @@ export const createFinanceEntrySchema = z.object({
   amount: z.string().nonempty('O valor é obrigatório'),
 
   type: z.enum(['INCOME', 'EXPENSE'], {
-    required_error: 'O tipo é obrigatório',
+    error: 'O tipo é obrigatório',
   }),
 
   status: z
@@ -29,9 +29,7 @@ export const createFinanceEntrySchema = z.object({
       return val;
     },
     z.enum(['CASH', 'CREDIT_CARD', 'DEBIT_CARD', 'TRANSFER', 'PIX', 'BOLETO'], {
-      errorMap: () => ({
-        message: 'Método de pagamento é obrigatório',
-      }),
+      error: 'Método de pagamento é obrigatório',
     }),
   ),
 
@@ -58,6 +56,9 @@ export const createFinanceEntrySchema = z.object({
 });
 
 export type ICreateFinanceEntry = z.infer<typeof createFinanceEntrySchema>;
+
+/** Pre-validation shape the form actually holds (`.default()`/`.preprocess()` make it differ). */
+export type ICreateFinanceEntryInput = z.input<typeof createFinanceEntrySchema>;
 
 export const defaultCreateFinanceEntryValues: ICreateFinanceEntry = {
   date: '',

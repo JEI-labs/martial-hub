@@ -24,7 +24,7 @@ export const SelectWithSearch: React.FC<SelectWithSearchProps> = ({
   onValueChange,
   value,
   disabled,
-  hasEmptyOption = true,
+  hasEmptyOption = false,
   ...props
 }) => {
   const [open, setOpen] = useState(false);

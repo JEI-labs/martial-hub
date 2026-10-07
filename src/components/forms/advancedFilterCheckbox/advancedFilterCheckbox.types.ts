@@ -1,3 +1,5 @@
+import * as React from 'react';
+
 import { SelectItemType } from '@/common/types/select';
 import { ButtonProps } from '@/components/ui/button';
 
@@ -9,8 +11,8 @@ export interface AdvancedFilterCheckboxProps {
   showCounterIndicator?: boolean;
   description?: string;
   buttonProps?: ButtonProps;
-  leftIcon?: JSX.Element;
-  rightIcon?: JSX.Element;
+  leftIcon?: React.JSX.Element;
+  rightIcon?: React.JSX.Element;
   showDeleteButton?: boolean;
   onDelete?: () => void;
   onChange?: (_values: Array<AdvancedFilterCheckboxType>) => void;

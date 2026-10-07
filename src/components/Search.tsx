@@ -35,13 +35,13 @@ const Search: React.FC<SearchProps> = ({
     <div className={cn('relative flex w-full max-w-[350px]', className)}>
       <div
         className={cn(
-          'flex w-full items-center rounded-md border bg-muted transition-all duration-200',
+          'bg-muted flex w-full items-center rounded-full border transition-all duration-200',
           isFocused
-            ? 'border-primary/50 shadow-sm ring-1 ring-primary/30'
+            ? 'border-primary/50 ring-primary/30 shadow-xs ring-1'
             : 'border-border',
         )}
       >
-        <div className="flex items-center justify-center pl-3 text-muted-foreground">
+        <div className="text-muted-foreground flex items-center justify-center pl-3">
           <SearchIcon className="h-4 w-4" />
         </div>
 
@@ -54,8 +54,8 @@ const Search: React.FC<SearchProps> = ({
           onFocus={() => setIsFocused(true)}
           onBlur={() => setIsFocused(false)}
           className={cn(
-            'h-10 flex-grow bg-transparent px-2 py-2',
-            'border-none outline-none focus:outline-none focus:ring-0 focus-visible:ring-0',
+            'h-10 grow bg-transparent px-2 py-2',
+            'border-none outline-hidden focus:ring-0 focus:outline-hidden focus-visible:ring-0',
             'shadow-none focus:shadow-none',
           )}
         />
@@ -63,7 +63,7 @@ const Search: React.FC<SearchProps> = ({
         {value.length > 0 && (
           <button
             onClick={handleClear}
-            className="mr-3 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted/30"
+            className="text-muted-foreground hover:bg-muted/30 mr-3 flex h-8 w-8 items-center justify-center rounded-full transition-colors"
             type="button"
             aria-label="Clear search"
           >

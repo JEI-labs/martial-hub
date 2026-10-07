@@ -9,7 +9,9 @@ export const getAllStudentInputSchema = z.object({
   page: z.number().min(1),
   limit: z.number().min(1),
   search: z.string().optional(),
-  status: z.array(z.enum(['EM DIA', 'PENDENTE', 'ATRASADO'])).optional(),
+  status: z
+    .array(z.enum(['EM DIA', 'PENDENTE', 'ATRASADO', 'SEM MATRÍCULA']))
+    .optional(),
   from: z.string().datetime().optional(),
   to: z.string().datetime().optional(),
 });

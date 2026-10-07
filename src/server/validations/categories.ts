@@ -10,12 +10,15 @@ export const createCategorySchema = z.object({
 
 export type ICreateCategory = z.infer<typeof createCategorySchema>;
 
+/** Pre-validation shape the form actually holds (`status` is defaulted). */
+export type ICreateCategoryInput = z.input<typeof createCategorySchema>;
+
 export const updateCategorySchema = z.object({
   id: z.string(),
   name: z.string().min(1, 'Nome é obrigatório').max(50),
   description: z.string().nullable(),
   status: z.nativeEnum(ECategoryStatus, {
-    errorMap: () => ({ message: 'Status é obrigatório' }),
+    error: 'Status é obrigatório',
   }),
 });
 

@@ -2,7 +2,12 @@ import { cn } from '@/lib/utils';
 import { Upload } from 'lucide-react';
 import Image from 'next/image';
 import React, { useState } from 'react';
-import type { FieldValues, Path, UseControllerProps } from 'react-hook-form';
+import type {
+  FieldPath,
+  FieldValues,
+  Path,
+  UseControllerProps,
+} from 'react-hook-form';
 import { Controller } from 'react-hook-form';
 import { FormInputFileComponentProps } from './formFIleInput.types';
 import {
@@ -16,7 +21,10 @@ import {
 import { buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
-export const FormFileInputComponent = <T extends FieldValues>({
+export const FormFileInputComponent = <
+  T extends FieldValues,
+  TTransformed = T,
+>({
   control,
   name,
   rules,
@@ -26,7 +34,8 @@ export const FormFileInputComponent = <T extends FieldValues>({
   cardClassname,
   generalclassname,
   label,
-}: UseControllerProps<T> & FormInputFileComponentProps): React.JSX.Element => {
+}: UseControllerProps<T, FieldPath<T>, TTransformed> &
+  FormInputFileComponentProps): React.JSX.Element => {
   const [fileName, setFileName] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
@@ -48,8 +57,8 @@ export const FormFileInputComponent = <T extends FieldValues>({
             name={name as Path<T>}
             render={() => (
               <FormItem className={cn(generalclassname)}>
-                <div className="grid gap-2 text-muted-foreground">
-                  <FormLabel className="grid gap-1 text-muted-foreground">
+                <div className="text-muted-foreground grid gap-2">
+                  <FormLabel className="text-muted-foreground grid gap-1">
                     <div className="flex items-center">
                       <p className="text-sm md:text-base">{label}</p>
                       {rules?.required && (
@@ -59,7 +68,7 @@ export const FormFileInputComponent = <T extends FieldValues>({
 
                     <div
                       className={cn(
-                        'flex w-full flex-col items-center gap-4 overflow-auto whitespace-normal break-words rounded-md border p-2 sm:flex-row sm:p-4',
+                        'flex w-full flex-col items-center gap-4 overflow-auto rounded-md border p-2 wrap-break-word whitespace-normal sm:flex-row sm:p-4',
                         cardClassname,
                       )}
                     >
@@ -102,7 +111,7 @@ export const FormFileInputComponent = <T extends FieldValues>({
                       {fileName && (
                         <div className="flex w-full max-w-full items-center">
                           <p
-                            className="w-full max-w-full overflow-hidden whitespace-normal break-words text-center text-sm sm:text-left sm:text-base"
+                            className="w-full max-w-full overflow-hidden text-center text-sm wrap-break-word whitespace-normal sm:text-left sm:text-base"
                             title={fileName}
                           >
                             Anexado: {fileName}
@@ -114,7 +123,7 @@ export const FormFileInputComponent = <T extends FieldValues>({
                               setPreviewUrl(null);
                               field.onChange(null);
                             }}
-                            className="ml-2 flex text-destructive hover:text-destructive/70"
+                            className="text-destructive-text hover:text-destructive-text/70 ml-2 flex"
                           >
                             Remover
                           </button>
@@ -127,7 +136,7 @@ export const FormFileInputComponent = <T extends FieldValues>({
 
                   <div className="flex flex-col justify-between sm:flex-row">
                     {!hideErrors && <FormMessage />}
-                    <FormDescription className="mt-1 text-right text-muted-foreground/50 sm:mt-0">
+                    <FormDescription className="text-muted-foreground/50 mt-1 text-right sm:mt-0">
                       * arquivos aceitos: {accept}
                     </FormDescription>
                   </div>

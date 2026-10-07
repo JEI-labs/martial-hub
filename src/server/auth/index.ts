@@ -7,6 +7,7 @@ import {
 import { type Adapter } from 'next-auth/adapters';
 
 import { prisma } from '@/server/db';
+import type { EUserRole } from '@prisma/client';
 import Credentials from 'next-auth/providers/credentials';
 import { authorize } from './authorize';
 
@@ -22,6 +23,11 @@ declare module 'next-auth' {
       id: string;
       name: string;
       email: string;
+      /** Academia a que a conta pertence. Nulo só para o dono do sistema. */
+      tenantId: string | null;
+      role: EUserRole;
+      /** Academia que o master está visitando para dar suporte. */
+      supportTenantId?: string | null;
     } & DefaultSession['user'];
   }
 
@@ -29,6 +35,8 @@ declare module 'next-auth' {
     id: string;
     name: string;
     email: string;
+    tenantId: string | null;
+    role: EUserRole;
   }
 }
 
@@ -44,7 +52,7 @@ export const authOptions: NextAuthOptions = {
     maxAge: 1 * 24 * 30 * 60, // 1 days
   },
   pages: {
-    signIn: '/login',
+    signIn: '/auth/entrar',
     // newUser: "/auth/register",
   },
   callbacks: {
@@ -53,6 +61,8 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id;
         token.name = user.name;
         token.email = user.email;
+        token.tenantId = user.tenantId;
+        token.role = user.role;
       }
       // if (trigger === "update" && session?.companyId) {
       //   token.companyId = session.companyId;
@@ -64,6 +74,10 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string;
         session.user.name = token.name as string;
         session.user.email = token.email as string;
+        session.user.tenantId = (token.tenantId as string | null) ?? null;
+        session.user.role = token.role as EUserRole;
+        session.user.supportTenantId =
+          (token.supportTenantId as string | null) ?? null;
       }
       return session;
     },
@@ -75,6 +89,9 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         username: { label: 'Usuário', type: 'username' },
         password: { label: 'Senha', type: 'password' },
+        /* Segunda etapa: vazio na primeira tentativa, preenchido quando a
+           tela volta pedindo o código. */
+        totp: { label: 'Código', type: 'text' },
       },
       authorize,
     }),

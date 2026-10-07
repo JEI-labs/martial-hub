@@ -1,25 +1,19 @@
 'use client';
 
+import { FormModal } from '@/components/formModal/formModal.component';
 import React, { useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { Form } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { FormInputComponent } from '@/components/forms/formInput/formInput.component';
-import { FormFileInputComponent } from '@/components/forms/formFileInput/formFileInput.component';
+import { AvatarField } from '@/components/forms/avatarField/avatarField.component';
 import {
   maskCellphone,
   maskDate,
   maskOnlyText,
   unmaskCellphone,
+  getInitials,
 } from '@/utils/masksUtils';
 import { Separator } from '@/components/ui/separator';
 import { api } from '@/trpc/react';
@@ -29,10 +23,8 @@ import {
 } from '@/server/validations/students';
 import { blobUrlToBase64 } from '@/common/utils/files';
 import { ISheetEditStudent } from './sheetEditStudent.types';
-import { CameraCaptureButton } from '@/components/camera/camera.component';
 
 export const SheetEditStudent: React.FC<ISheetEditStudent> = ({
-  side,
   isOpen,
   setIsOpen,
   studentId,
@@ -72,6 +64,8 @@ export const SheetEditStudent: React.FC<ISheetEditStudent> = ({
       });
     }
   }, [studentEdit.data, form]);
+
+  const watchedName = useWatch({ control: form.control, name: 'name' });
 
   const onSubmit = async (data: IUpdateStudentTypes) => {
     try {
@@ -113,100 +107,71 @@ export const SheetEditStudent: React.FC<ISheetEditStudent> = ({
   };
 
   return (
-    <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent
-        side={side}
-        className="min-w-[40vw] items-center overflow-auto xl:min-w-[30vw]"
+    <Form {...form}>
+      <FormModal
+        open={isOpen}
+        onOpenChange={setIsOpen}
+        title="Editar aluno"
+        description="Altere os dados do aluno"
+        onSubmit={form.handleSubmit(onSubmit)}
+        submitLabel="Salvar alterações"
+        submitPendingLabel="Salvando..."
+        isSubmitting={updateStudent.isPending || form.formState.isSubmitting}
       >
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)}>
-            <SheetHeader className="mx-2 mb-8 flex flex-col items-center">
-              <SheetTitle className="text-2xl">Editar Aluno</SheetTitle>
-              <SheetDescription className="mt-2 text-center text-sm">
-                Faça as alterações necessárias para o aluno selecionado abaixo
-              </SheetDescription>
+        <AvatarField
+          control={form.control}
+          name="avatarUrl"
+          fallback={watchedName ? getInitials(watchedName) : undefined}
+        />
 
-              <div className="flex w-full flex-col items-center justify-center gap-2">
-                <FormFileInputComponent
-                  control={form.control}
-                  name="avatarUrl"
-                  label="Imagem do aluno"
-                  type="file"
-                  accept=".jpg, .jpeg, .png"
-                  showPreview
-                />
+        <Separator />
 
-                <CameraCaptureButton
-                  onCapture={(blobUrl) => {
-                    form.setValue('avatarUrl', blobUrl, {
-                      shouldValidate: true,
-                    });
-                  }}
-                />
-              </div>
-            </SheetHeader>
-
-            <Separator />
-
-            <div className="mx-2 my-8 grid grid-cols-4 gap-6">
-              <div className="col-span-4">
-                <FormInputComponent
-                  control={form.control}
-                  name="name"
-                  label="Nome do aluno"
-                  type="text"
-                  mask={maskOnlyText}
-                  placeholder="Nome completo"
-                  maxLength={50}
-                />
-              </div>
-              <div className="col-span-4">
-                <FormInputComponent
-                  control={form.control}
-                  name="email"
-                  label="Email do aluno"
-                  type="email"
-                  placeholder="exemplo@exemplo.com"
-                  maxLength={50}
-                />
-              </div>
-              <div className="col-span-2">
-                <FormInputComponent
-                  control={form.control}
-                  name="birthDate"
-                  label="Data de nascimento"
-                  type="text"
-                  mask={maskDate}
-                  placeholder="DD/MM/AAAA"
-                  maxLength={10}
-                />
-              </div>
-              <div className="col-span-2">
-                <FormInputComponent
-                  control={form.control}
-                  name="phone"
-                  label="Telefone"
-                  mask={maskCellphone}
-                  unmask={unmaskCellphone}
-                  placeholder="(XX) XXXXX-XXXX"
-                  maxLength={15}
-                />
-              </div>
-            </div>
-
-            <div className="mb-4 flex justify-end">
-              <Button
-                type="submit"
-                disabled={
-                  updateStudent.isPending || form.formState.isSubmitting
-                }
-              >
-                {updateStudent.isPending ? 'Editando aluno...' : 'Editar aluno'}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </SheetContent>
-    </Sheet>
+        <div className="grid grid-cols-4 gap-6">
+          <div className="col-span-2">
+            <FormInputComponent
+              control={form.control}
+              name="name"
+              label="Nome do aluno"
+              type="text"
+              mask={maskOnlyText}
+              placeholder="Nome completo"
+              maxLength={50}
+            />
+          </div>
+          <div className="col-span-2">
+            <FormInputComponent
+              control={form.control}
+              name="email"
+              label="Email do aluno"
+              type="email"
+              placeholder="exemplo@exemplo.com"
+              maxLength={50}
+            />
+          </div>
+          <div className="col-span-2">
+            <FormInputComponent
+              control={form.control}
+              name="birthDate"
+              label="Data de nascimento"
+              type="text"
+              mask={maskDate}
+              placeholder="DD/MM/AAAA"
+              maxLength={10}
+            />
+          </div>
+          <div className="col-span-2">
+            <FormInputComponent
+              control={form.control}
+              name="phone"
+              label="Telefone"
+              mask={maskCellphone}
+              unmask={unmaskCellphone}
+              placeholder="(XX) XXXXX-XXXX"
+              maxLength={15}
+            />
+          </div>
+        </div>
+      </FormModal>
+    </Form>
   );
 };

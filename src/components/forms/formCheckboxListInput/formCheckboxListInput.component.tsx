@@ -1,6 +1,11 @@
 import React from 'react';
 
-import { Controller, FieldValues, UseControllerProps } from 'react-hook-form';
+import {
+  Controller,
+  FieldPath,
+  FieldValues,
+  UseControllerProps,
+} from 'react-hook-form';
 
 import { FormCheckboxListComponentProps } from './formCheckboxListInput.types';
 import {
@@ -13,13 +18,16 @@ import {
 } from '@/components/ui/form';
 import { Checkbox } from '@/components/ui/checkbox';
 
-export const FormCheckboxListComponent = <T extends FieldValues>({
+export const FormCheckboxListComponent = <
+  T extends FieldValues,
+  TTransformed = T,
+>({
   control,
   name,
   rules,
   options = [],
   ...props
-}: UseControllerProps<T> &
+}: UseControllerProps<T, FieldPath<T>, TTransformed> &
   FormCheckboxListComponentProps): React.JSX.Element => {
   return (
     <Controller
@@ -53,7 +61,7 @@ export const FormCheckboxListComponent = <T extends FieldValues>({
                       return (
                         <FormItem
                           key={item.id}
-                          className="flex flex-row items-start space-x-3 space-y-0"
+                          className="flex flex-row items-start space-y-0 space-x-3"
                         >
                           <FormControl>
                             <Checkbox

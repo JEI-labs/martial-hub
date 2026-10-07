@@ -1,10 +1,15 @@
-import type { ButtonProps } from 'react-day-picker';
+import * as React from 'react';
+
+import type { ButtonProps } from '@/components/ui/button';
+
 import type { DefaultValues, Path, ValidationMode } from 'react-hook-form';
 import type { ZodType } from 'zod';
 import type { FormInputComponentProps } from '../formInput/formInput.component.types';
 
-export interface AdvancedFilterTextInputProps<T>
-  extends Omit<FormInputComponentProps, 'defaultValue' | 'onChange'> {
+export interface AdvancedFilterTextInputProps<T> extends Omit<
+  FormInputComponentProps,
+  'defaultValue' | 'onChange'
+> {
   name: Path<T>;
   placeholder: string;
   zodResolver?: ZodType;
@@ -13,8 +18,8 @@ export interface AdvancedFilterTextInputProps<T>
   title: string;
   description?: string;
   buttonProps?: ButtonProps;
-  leftIcon?: JSX.Element;
-  rightIcon?: JSX.Element;
+  leftIcon?: React.JSX.Element;
+  rightIcon?: React.JSX.Element;
   showDeleteButton?: boolean;
   validationMode?: keyof ValidationMode;
   inputDescription?: string;

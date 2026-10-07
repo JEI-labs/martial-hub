@@ -1,17 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Button } from '@/components/ui/button';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet';
-import { Separator } from '@/components/ui/separator';
+import { FormModal } from '@/components/formModal/formModal.component';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Form } from '@/components/ui/form';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/trpc/react';
@@ -44,27 +36,41 @@ export const SheetCreateSupplier: React.FC<ICreateSheetSupplier> = ({
     },
   });
 
-  // cache em memória: estado.sigla → opções de cidades
-  const citiesCache = useRef<
+  // cache em memória: estado.sigla → opções de cidades. Fica em state (e não
+  // num ref) para que `citiesOptions` e `loadingCities` possam ser derivados.
+  const [citiesCache, setCitiesCache] = useState<
     Record<string, Array<{ value: string; textValue: string }>>
   >({});
-  const [loadingStates, setLoadingStates] = useState(false);
-  const [loadingCities, setLoadingCities] = useState(false);
+  const [statesLoaded, setStatesLoaded] = useState(false);
 
   const [rawStates, setRawStates] = useState<Array<IBGEState>>([]);
-  const [citiesOptions, setCitiesOptions] = useState<
-    Array<{ value: string; textValue: string }>
-  >([]);
-  const selectedState = form.watch('state');
+  const selectedState = useWatch({ control: form.control, name: 'state' });
+
+  // Derivados em vez de guardados, para nenhum efeito precisar ligar uma flag
+  // de forma síncrona (o que dispara render em cascata).
+  const loadingStates = !statesLoaded;
+  const citiesOptions = selectedState ? (citiesCache[selectedState] ?? []) : [];
+  // ternário em vez de `Boolean(...) &&`, que não estreita o tipo
+  const loadingCities = selectedState ? !(selectedState in citiesCache) : false;
 
   useEffect(() => {
-    setLoadingStates(true);
+    let cancelled = false;
+
     fetchStates()
-      .then((data) => setRawStates(data))
-      .catch(() =>
-        toast({ title: 'Erro ao carregar estados', variant: 'destructive' }),
-      )
-      .finally(() => setLoadingStates(false));
+      .then((data) => {
+        if (!cancelled) setRawStates(data);
+      })
+      .catch(() => {
+        if (!cancelled)
+          toast({ title: 'Erro ao carregar estados', variant: 'destructive' });
+      })
+      .finally(() => {
+        if (!cancelled) setStatesLoaded(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [toast]);
 
   const statesOptions = useMemo(
@@ -76,37 +82,37 @@ export const SheetCreateSupplier: React.FC<ICreateSheetSupplier> = ({
     [rawStates],
   );
 
+  // limpa a cidade sempre que o estado muda
   useEffect(() => {
     form.setValue('city', '');
+  }, [selectedState, form]);
 
-    if (!selectedState) {
-      setCitiesOptions([]);
-      setLoadingCities(false);
-      return;
-    }
+  useEffect(() => {
+    // já cacheado (ou nada a buscar): `citiesOptions` já reflete isso
+    if (!selectedState || selectedState in citiesCache) return;
 
-    // se já tem no cache, usa direto
-    if (citiesCache.current[selectedState]) {
-      setCitiesOptions(citiesCache.current[selectedState]);
-      return;
-    }
+    let cancelled = false;
 
-    // senão busca e cacheia
-    setLoadingCities(true);
     fetchCities(selectedState)
       .then((data) => {
+        if (cancelled) return;
         const opts = data.map((ct) => ({
           value: ct.nome,
           textValue: ct.nome,
         }));
-        citiesCache.current[selectedState] = opts;
-        setCitiesOptions(opts);
+        setCitiesCache((prev) => ({ ...prev, [selectedState]: opts }));
       })
-      .catch(() =>
-        toast({ title: 'Erro ao carregar cidades', variant: 'destructive' }),
-      )
-      .finally(() => setLoadingCities(false));
-  }, [selectedState, toast, form]);
+      .catch(() => {
+        if (cancelled) return;
+        toast({ title: 'Erro ao carregar cidades', variant: 'destructive' });
+        // grava vazio para não deixar o select preso em "carregando"
+        setCitiesCache((prev) => ({ ...prev, [selectedState]: [] }));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedState, citiesCache, toast]);
 
   const onSubmit = async (vals: ICreateSupplier) => {
     try {
@@ -126,78 +132,66 @@ export const SheetCreateSupplier: React.FC<ICreateSheetSupplier> = ({
   };
 
   return (
-    <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent side="right" className="min-w-[30vw] overflow-auto">
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="space-y-6 p-4"
-          >
-            <SheetHeader>
-              <SheetTitle>Novo Fornecedor</SheetTitle>
-              <SheetDescription>
-                Preencha os dados para cadastrar um fornecedor
-              </SheetDescription>
-            </SheetHeader>
-            <Separator />
+    <Form {...form}>
+      <FormModal
+        open={isOpen}
+        onOpenChange={setIsOpen}
+        title="Novo fornecedor"
+        description="Preencha os dados do fornecedor"
+        onSubmit={form.handleSubmit(onSubmit)}
+        submitLabel="Salvar"
+        submitPendingLabel="Salvando..."
+        isSubmitting={form.formState.isSubmitting}
+      >
+        <FormInputComponent
+          control={form.control}
+          name="name"
+          label="Nome"
+          placeholder="Nome do fornecedor"
+        />
+        <FormInputComponent
+          control={form.control}
+          name="phone"
+          label="Telefone"
+          placeholder="(xx) xxxxx-xxxx"
+          mask={maskCellphone}
+          unmask={unmaskCellphone}
+          maxLength={15}
+        />
+        <FormInputComponent
+          control={form.control}
+          name="street"
+          label="Rua"
+          placeholder="Rua do fornecedor"
+          maxLength={100}
+        />
 
-            <FormInputComponent
-              control={form.control}
-              name="name"
-              label="Nome"
-              placeholder="Nome do fornecedor"
-            />
-            <FormInputComponent
-              control={form.control}
-              name="phone"
-              label="Telefone"
-              placeholder="(xx) xxxxx-xxxx"
-              mask={maskCellphone}
-              unmask={unmaskCellphone}
-              maxLength={15}
-            />
-            <FormInputComponent
-              control={form.control}
-              name="street"
-              label="Rua"
-              placeholder="Rua do fornecedor"
-              maxLength={100}
-            />
+        <FormSelectComponent
+          control={form.control}
+          name="state"
+          label="Estado"
+          placeholder={
+            loadingStates ? 'Carregando estados...' : 'Selecione o estado'
+          }
+          options={statesOptions}
+          disabled={loadingStates}
+        />
 
-            <FormSelectComponent
-              control={form.control}
-              name="state"
-              label="Estado"
-              placeholder={
-                loadingStates ? 'Carregando estados...' : 'Selecione o estado'
-              }
-              options={statesOptions}
-              disabled={loadingStates}
-            />
-
-            <FormSelectComponent
-              control={form.control}
-              name="city"
-              label="Cidade"
-              placeholder={
-                !selectedState
-                  ? 'Selecione um estado primeiro'
-                  : loadingCities
-                    ? 'Carregando cidades...'
-                    : 'Selecione a cidade'
-              }
-              options={citiesOptions}
-              disabled={!selectedState || loadingCities}
-            />
-
-            <div className="flex justify-end pt-4">
-              <Button type="submit" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting ? 'Salvando...' : 'Salvar'}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </SheetContent>
-    </Sheet>
+        <FormSelectComponent
+          control={form.control}
+          name="city"
+          label="Cidade"
+          placeholder={
+            !selectedState
+              ? 'Selecione um estado primeiro'
+              : loadingCities
+                ? 'Carregando cidades...'
+                : 'Selecione a cidade'
+          }
+          options={citiesOptions}
+          disabled={!selectedState || loadingCities}
+        />
+      </FormModal>
+    </Form>
   );
 };

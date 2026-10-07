@@ -1,17 +1,9 @@
 'use client';
 
+import { FormModal } from '@/components/formModal/formModal.component';
 import React, { useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet';
-import { Separator } from '@/components/ui/separator';
 import { Form } from '@/components/ui/form';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/trpc/react';
@@ -29,6 +21,7 @@ export const SheetEditSupplier: React.FC<IEditSheetSupplier> = ({
   isOpen,
   setIsOpen,
   supplierId,
+  onDelete,
   refetch,
 }) => {
   const { toast } = useToast();
@@ -69,7 +62,7 @@ export const SheetEditSupplier: React.FC<IEditSheetSupplier> = ({
     }
   }, [data?.data, form]);
 
-  const selectedState = form.watch('state');
+  const selectedState = useWatch({ control: form.control, name: 'state' });
 
   const { statesOptions, citiesOptions, loadingStates, loadingCities } =
     useStateCityOptions(selectedState || '', data?.data?.state || '');
@@ -99,79 +92,63 @@ export const SheetEditSupplier: React.FC<IEditSheetSupplier> = ({
   };
 
   return (
-    <Sheet open={isOpen} onOpenChange={setIsOpen}>
-      <SheetContent side="right" className="min-w-[30vw] overflow-auto">
-        <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="space-y-6 p-4"
-          >
-            <SheetHeader>
-              <SheetTitle>Editar Fornecedor</SheetTitle>
-              <SheetDescription>
-                Atualize os dados do fornecedor
-              </SheetDescription>
-            </SheetHeader>
-            <Separator />
+    <Form {...form}>
+      <FormModal
+        open={isOpen}
+        onOpenChange={setIsOpen}
+        title="Editar fornecedor"
+        description="Altere os dados do fornecedor"
+        onSubmit={form.handleSubmit(onSubmit)}
+        onDelete={onDelete}
+        submitLabel="Atualizar"
+        submitPendingLabel="Atualizando..."
+        isSubmitting={update.isPending || form.formState.isSubmitting}
+      >
+        <FormInputComponent
+          control={form.control}
+          name="name"
+          label="Nome"
+          maxLength={50}
+        />
+        <FormInputComponent
+          control={form.control}
+          name="phone"
+          label="Telefone"
+          mask={maskCellphone}
+          unmask={unmaskCellphone}
+          maxLength={15}
+        />
+        <FormInputComponent
+          control={form.control}
+          name="street"
+          label="Rua"
+          maxLength={100}
+        />
 
-            <FormInputComponent
-              control={form.control}
-              name="name"
-              label="Nome"
-              maxLength={50}
-            />
-            <FormInputComponent
-              control={form.control}
-              name="phone"
-              label="Telefone"
-              mask={maskCellphone}
-              unmask={unmaskCellphone}
-              maxLength={15}
-            />
-            <FormInputComponent
-              control={form.control}
-              name="street"
-              label="Rua"
-              maxLength={100}
-            />
+        <FormSelectComponent
+          control={form.control}
+          name="state"
+          label="Estado"
+          placeholder={loadingStates ? 'Carregando...' : 'Selecione o estado'}
+          options={statesOptions}
+          disabled={loadingStates}
+        />
 
-            <FormSelectComponent
-              control={form.control}
-              name="state"
-              label="Estado"
-              placeholder={
-                loadingStates ? 'Carregando...' : 'Selecione o estado'
-              }
-              options={statesOptions}
-              disabled={loadingStates}
-            />
-
-            <FormSelectComponent
-              control={form.control}
-              name="city"
-              label="Cidade"
-              placeholder={
-                !selectedState
-                  ? 'Selecione um estado primeiro'
-                  : loadingCities
-                    ? 'Carregando...'
-                    : 'Selecione a cidade'
-              }
-              options={citiesOptions}
-              disabled={!selectedState || loadingCities}
-            />
-
-            <div className="flex justify-end pt-4">
-              <Button
-                type="submit"
-                disabled={update.isPending || form.formState.isSubmitting}
-              >
-                {update.isPending ? 'Atualizando...' : 'Atualizar'}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </SheetContent>
-    </Sheet>
+        <FormSelectComponent
+          control={form.control}
+          name="city"
+          label="Cidade"
+          placeholder={
+            !selectedState
+              ? 'Selecione um estado primeiro'
+              : loadingCities
+                ? 'Carregando...'
+                : 'Selecione a cidade'
+          }
+          options={citiesOptions}
+          disabled={!selectedState || loadingCities}
+        />
+      </FormModal>
+    </Form>
   );
 };

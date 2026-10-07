@@ -38,8 +38,8 @@ export const filesRouter = createTRPCRouter({
         });
       }
 
-      const blobData = new Blob([buffer]);
-      const blob = await put(filename, blobData, {
+      // `put` accepts a Buffer directly, so no Blob round-trip is needed.
+      const blob = await put(filename, buffer, {
         access: 'public',
       });
 

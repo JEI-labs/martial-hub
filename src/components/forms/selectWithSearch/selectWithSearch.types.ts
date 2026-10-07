@@ -1,7 +1,9 @@
 import { ButtonProps } from '@/components/ui/button';
 
-export interface SelectWithSearchProps
-  extends Omit<ButtonProps, 'onChange' | 'value'> {
+export interface SelectWithSearchProps extends Omit<
+  ButtonProps,
+  'onChange' | 'value'
+> {
   label?: string;
   options?: Array<{
     value: string | null;

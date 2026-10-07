@@ -1,7 +1,6 @@
 {
   "compilerOptions": {
     /* ------------------------------- BASE OPTIONS ------------------------------- */
-
     "esModuleInterop": true, // Enables default interoperability between CommonJS and ES Modules
     "skipLibCheck": true, // Skips type checking of declaration files (*.d.ts) to speed up compilation
     "target": "es2022", // Sets the JavaScript language version for emitted JavaScript
@@ -10,28 +9,32 @@
     "moduleDetection": "force", // Forces TypeScript to treat every file as a module
     "isolatedModules": true, // Ensures that each file can be safely transpiled independently
     "removeComments": true, // Removes comments from the emitted JavaScript files
-
     /* ------------------------------- STRICTNESS ------------------------------- */
-
     "strict": true, // Enables all strict type-checking options
     "noUncheckedIndexedAccess": true, // Adds undefined to object index signatures, making them safer
     "checkJs": true, // Enables type checking for JavaScript files
-
     /* ---------------------------- BUNDLED PROJECTS ---------------------------- */
-
-    "lib": ["dom", "dom.iterable", "ES2022"], // Specifies the libraries to include during compilation
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "ES2022"
+    ], // Specifies the libraries to include during compilation
     "noEmit": true, // Prevents TypeScript from emitting JavaScript files
     "module": "ESNext", // Specifies the module code generation (ESNext modules)
     "moduleResolution": "Bundler", // Uses bundler-specific module resolution (ideal for Next.js/Vite)
-    "jsx": "preserve", // Preserves JSX in output to let bundlers handle it (Next.js behavior)
-    "plugins": [{ "name": "next" }], // Loads the Next.js TypeScript plugin for better integration
+    "jsx": "react-jsx", // Preserves JSX in output to let bundlers handle it (Next.js behavior)
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ], // Loads the Next.js TypeScript plugin for better integration
     "incremental": true, // Enables incremental compilation to improve build performance
-
     /* ------------------------------- PATH ALIASES ------------------------------- */
-
-    "baseUrl": ".", // Sets the base directory for module resolution
+    // `baseUrl` was dropped (deprecated in TS 6); `paths` below are relative to this file.
     "paths": {
-      "@/*": ["./src/*"] // Defines a path alias (@) to simplify imports from the src directory
+      "@/*": [
+        "./src/*"
+      ] // Defines a path alias (@) to simplify imports from the src directory
     }
   },
   "include": [
@@ -42,6 +45,8 @@
     "**/*.cjs", // Includes all CommonJS JavaScript files
     "**/*.js", // Includes all JavaScript files
     ".next/types/**/*.ts" // Includes Next.js specific type declarations for the build process
+    ,
+    ".next/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules" // Excludes the node_modules folder from compilation

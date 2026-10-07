@@ -1,3 +1,5 @@
+import * as React from 'react';
+
 import { ButtonProps } from '@/components/ui/button';
 import { DateRange } from 'react-day-picker';
 
@@ -8,8 +10,8 @@ export interface AdvancedFilterDatePickerProps {
   description?: string;
   onChange?: (_values: AdvancedFilterDatePickerType) => void;
   buttonProps?: ButtonProps;
-  leftIcon?: JSX.Element;
-  rightIcon?: JSX.Element;
+  leftIcon?: React.JSX.Element;
+  rightIcon?: React.JSX.Element;
   onDelete?: () => void;
   showDeleteButton?: boolean;
   numberOfMonths?: number;

@@ -1,128 +1,121 @@
 'use client';
 
-import React, { useState } from 'react';
+import { EmptyState } from '@/components/emptyState/emptyState.component';
+import { ListSkeleton } from '@/components/skeletons/listSkeleton.component';
+import { PLAN_BILLING_LABEL } from '@/common/constants/planBilling';
+import { monthlyValue } from '@/utils/planUtils';
+import { maskBRL } from '@/utils/masksUtils';
+import { EPlanBilling } from '@prisma/client';
+import React from 'react';
+
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Button } from '@/components/ui/button';
-import { MdDelete } from 'react-icons/md';
-import { Edit2Icon } from 'lucide-react';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import type { IPlanList } from './plansList.types';
-import ConfirmDeleteDialog from '../confirmDeleteDialog/confirmDeleteDialog.component';
 
-const PlansList: React.FC<IPlanList> = ({
-  plans,
-  isLoading,
-  onEdit,
-  onDelete,
-}) => {
-  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
-  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+const formatDate = (value: string | Date) =>
+  new Date(value).toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
 
-  const handleEdit = (id: string) => {
-    onEdit(id);
-  };
-
-  const handleDeleteClick = (id: string) => {
-    setSelectedPlanId(id);
-    setOpenDeleteDialog(true);
-  };
-
-  const handleConfirmDelete = async (id: string) => {
-    await onDelete(id);
-    setOpenDeleteDialog(false);
-    setSelectedPlanId(null);
-  };
-
+const PlansList: React.FC<IPlanList> = ({ plans, isLoading, onEdit }) => {
   return (
     <div className="w-full">
       <div className="mt-4">
-        <h1 className="text-md font-semibold">Lista de Planos</h1>
-      </div>
-
-      <div className="mt-4 p-0">
         {isLoading ? (
-          <p className="py-4 text-center">Carregando planos…</p>
+          <ListSkeleton columns={5} />
         ) : plans.length === 0 ? (
-          <p className="py-4 text-center text-muted-foreground">
-            Não foram encontrados planos.
-          </p>
+          <EmptyState
+            title="Nenhum plano encontrado"
+            description="Ajuste a busca, ou crie o primeiro plano de matrícula."
+          />
         ) : (
-          <ScrollArea className="h-full w-full overflow-auto">
-            <div className="space-y-2">
-              {plans.map((plan) => (
-                <div
-                  key={plan.id}
-                  className="overflow-hidden rounded-lg border"
-                >
-                  <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    {/* título + preço */}
-                    <div className="flex w-full items-center justify-between break-words">
-                      <h3 className="text-lg font-semibold">{plan.name}</h3>
-                      <div className="flex flex-col items-center">
-                        <span className="mb-1 text-xs text-muted-foreground">
-                          Valor da parcela do plano
-                        </span>
-                        <Badge variant="secondary">
-                          R$ {Number(plan.price).toFixed(2)}
-                        </Badge>
+          <div className="bg-card shadow-card overflow-hidden rounded-2xl">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Plano</TableHead>
+                  <TableHead>Descrição</TableHead>
+                  <TableHead>Duração</TableHead>
+                  <TableHead>Cobrança</TableHead>
+                  <TableHead className="text-right">Preço</TableHead>
+                  <TableHead>Criado em</TableHead>
+                </TableRow>
+              </TableHeader>
+
+              <TableBody>
+                {plans.map((plan) => (
+                  <TableRow
+                    key={plan.id}
+                    className="cursor-pointer"
+                    onClick={() => onEdit(plan.id)}
+                  >
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        {plan.name}
+                        {plan.isDefault && (
+                          <Badge variant="outline" className="font-normal">
+                            Padrão
+                          </Badge>
+                        )}
                       </div>
-                    </div>
+                    </TableCell>
 
-                    {/* descrição + duração */}
-                    <div className="w-full text-sm text-muted-foreground">
-                      {plan.description && (
-                        <p className="break-words">
-                          <span className="font-semibold">Descrição: </span>
-                          {plan.description}
-                        </p>
+                    <TableCell className="text-muted-foreground max-w-xs truncate">
+                      {plan.description || '—'}
+                    </TableCell>
+
+                    <TableCell className="text-muted-foreground">
+                      {plan.duration} {plan.duration === 1 ? 'mês' : 'meses'}
+                    </TableCell>
+
+                    <TableCell>
+                      <Badge
+                        variant={
+                          plan.billing === EPlanBilling.UPFRONT
+                            ? 'default'
+                            : 'outline'
+                        }
+                      >
+                        {PLAN_BILLING_LABEL[plan.billing]}
+                      </Badge>
+                    </TableCell>
+
+                    {/* O preço é o do período; embaixo, o que isso dá por mês,
+                        que é como o professor compara um plano com o outro. */}
+                    <TableCell className="text-right whitespace-nowrap">
+                      <span className="font-medium">
+                        {maskBRL(Number(plan.price), true)}
+                      </span>
+                      {plan.duration > 1 && (
+                        <span className="text-muted-foreground block text-xs">
+                          {maskBRL(
+                            monthlyValue(Number(plan.price), plan.duration),
+                            true,
+                          )}
+                          /mês
+                        </span>
                       )}
-                      <p className="mt-2 text-xs">
-                        Duração: {plan.duration}{' '}
-                        {plan.duration === 1 ? 'mês' : 'meses'}
-                      </p>
-                      <p className="mt-1 text-xs">
-                        Criado em:{' '}
-                        {new Date(plan.createdAt).toLocaleDateString('pt-BR', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric',
-                        })}
-                      </p>
-                    </div>
+                    </TableCell>
 
-                    {/* botões */}
-                    <div className="flex w-full justify-end gap-2 sm:justify-end">
-                      <Button
-                        variant="default"
-                        size="icon"
-                        onClick={() => handleEdit(plan.id)}
-                      >
-                        <Edit2Icon size={18} />
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        size="icon"
-                        onClick={() => handleDeleteClick(plan.id)}
-                      >
-                        <MdDelete size={18} />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
+                    <TableCell className="text-muted-foreground">
+                      {formatDate(plan.createdAt)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </div>
-
-      {selectedPlanId && (
-        <ConfirmDeleteDialog
-          item={selectedPlanId}
-          open={openDeleteDialog}
-          onOpenChange={setOpenDeleteDialog}
-          onConfirm={handleConfirmDelete}
-        />
-      )}
     </div>
   );
 };

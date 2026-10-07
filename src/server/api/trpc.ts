@@ -11,6 +11,8 @@ import { initTRPC, TRPCError } from '@trpc/server';
 import superjson from 'superjson';
 import { ZodError } from 'zod';
 
+import { EUserRole } from '@prisma/client';
+
 import { getServerAuthSession } from '@/server/auth';
 import { prisma } from '@/server/db';
 
@@ -124,10 +126,98 @@ export const protectedProcedure = t.procedure
     if (!ctx.session || !ctx.session.user) {
       throw new TRPCError({ code: 'UNAUTHORIZED' });
     }
+
+    /* O master em suporte não tem academia própria: a que vale é a que ele
+       está visitando, e ela veio assinada no bilhete de entrada. */
+    const { tenantId: tenantDaConta, supportTenantId } = ctx.session.user;
+    const tenantId = tenantDaConta ?? supportTenantId ?? null;
+
+    /* Dado é da academia, não de quem está logado: o recepcionista enxerga os
+       mesmos alunos que o dono. Sem tenant na sessão não há o que consultar —
+       é o caso do MASTER, que tem as rotas dele. */
+    if (!tenantId) {
+      throw new TRPCError({
+        code: 'FORBIDDEN',
+        message: 'Esta conta não pertence a nenhuma academia.',
+      });
+    }
+
     return next({
       ctx: {
         // infers the `session` as non-nullable
         session: { ...ctx.session, user: ctx.session.user },
+        tenantId,
       },
+    });
+  });
+
+/**
+ * Autenticado e nada além: serve para o que é da conta, não da academia —
+ * perfil e verificação em duas etapas. `protectedProcedure` exige tenant, e o
+ * dono do sistema não tem nenhum.
+ */
+export const sessionProcedure = t.procedure
+  .use(timingMiddleware)
+  .use(({ ctx, next }) => {
+    if (!ctx.session?.user) {
+      throw new TRPCError({ code: 'UNAUTHORIZED' });
+    }
+
+    return next({
+      ctx: { session: { ...ctx.session, user: ctx.session.user } },
+    });
+  });
+
+/**
+ * Quem pode o quê.
+ *
+ * MASTER entra em tudo porque é quem dá suporte. OWNER manda na academia.
+ * STAFF é a recepção: aluno e dinheiro do dia a dia, sem mexer no que define
+ * a academia. TEACHER é o professor: aluno e graduação, e só.
+ */
+const exigirPapel = (papeis: ReadonlyArray<EUserRole>) =>
+  protectedProcedure.use(({ ctx, next }) => {
+    const { role } = ctx.session.user;
+
+    if (role !== EUserRole.MASTER && !papeis.includes(role)) {
+      throw new TRPCError({
+        code: 'FORBIDDEN',
+        message: 'Seu acesso não permite esta ação.',
+      });
+    }
+
+    return next({ ctx });
+  });
+
+/** Define a academia: planos, cadastros, marca, equipe, WhatsApp. */
+export const ownerProcedure = exigirPapel([EUserRole.OWNER]);
+
+/** O dia a dia da recepção: aluno, matrícula, pagamento, lançamento. */
+export const staffProcedure = exigirPapel([EUserRole.OWNER, EUserRole.STAFF]);
+
+/** Tudo que o professor também faz: olhar aluno e registrar graduação. */
+export const teacherProcedure = exigirPapel([
+  EUserRole.OWNER,
+  EUserRole.STAFF,
+  EUserRole.TEACHER,
+]);
+
+/**
+ * Procedure do dono do sistema: enxerga todas as academias e não pertence a
+ * nenhuma. É o que sustenta o menu master.
+ */
+export const masterProcedure = t.procedure
+  .use(timingMiddleware)
+  .use(({ ctx, next }) => {
+    if (!ctx.session?.user) {
+      throw new TRPCError({ code: 'UNAUTHORIZED' });
+    }
+
+    if (ctx.session.user.role !== EUserRole.MASTER) {
+      throw new TRPCError({ code: 'FORBIDDEN' });
+    }
+
+    return next({
+      ctx: { session: { ...ctx.session, user: ctx.session.user } },
     });
   });

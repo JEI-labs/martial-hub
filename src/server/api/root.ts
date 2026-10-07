@@ -7,6 +7,13 @@ import { usersRouter } from './routers/users';
 import { plansRouter } from './routers/plans';
 import { supplierRouter } from './routers/suppliers';
 import { paymentsRouter } from './routers/payments';
+import { promotionsRouter } from './routers/promotions';
+import { whatsappRouter } from './routers/whatsapp';
+import { dashboardRouter } from './routers/dashboard';
+import { tenantRouter } from './routers/tenant';
+import { masterRouter } from './routers/master';
+import { securityRouter } from './routers/security';
+import { modalitiesRouter } from './routers/modalities';
 
 /**
  * This is the primary router for your server.
@@ -22,6 +29,13 @@ export const appRouter = createTRPCRouter({
   plans: plansRouter,
   supplier: supplierRouter,
   payment: paymentsRouter,
+  promotion: promotionsRouter,
+  whatsapp: whatsappRouter,
+  dashboard: dashboardRouter,
+  tenant: tenantRouter,
+  master: masterRouter,
+  security: securityRouter,
+  modalities: modalitiesRouter,
 });
 
 // export type definition of API

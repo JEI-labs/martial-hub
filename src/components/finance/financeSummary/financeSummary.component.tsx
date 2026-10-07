@@ -1,74 +1,54 @@
 import React from 'react';
 import {
-  ArrowUpRight,
   ArrowDownRight,
-  DollarSign,
+  ArrowUpRight,
   GraduationCap,
+  Wallet,
 } from 'lucide-react';
+
+import { KpiCard } from '@/components/kpiCard/kpiCard.component';
 import { IFinancialSummary } from './financeSummary.types';
 import { maskBRL } from '@/utils/masksUtils';
 
+/**
+ * Os quatro números do período. Usa o mesmo cartão do painel: antes eram
+ * caixas próprias com o valor colorido de verde ou vermelho, o que pintava a
+ * tela inteira e ainda dizia a cor errada — receita não é "boa" nem despesa
+ * "ruim", elas só existem. Cor fica só onde tem julgamento: o saldo.
+ */
 export const FinancialSummary: React.FC<IFinancialSummary> = (
   data: IFinancialSummary,
 ) => {
   return (
-    <div className="grid gap-4 lg:grid-cols-4">
-      {/* Receitas */}
-      <div className="flex items-center gap-4 rounded-lg bg-muted p-4">
-        <ArrowUpRight className="h-6 w-6 text-green-600" />
-        <div>
-          <span className="block text-sm text-muted-foreground">
-            Total de Receitas Pagas
-          </span>
-          <span className="text-lg font-semibold text-green-600">
-            {maskBRL(data.incomes, true)}
-          </span>
-        </div>
-      </div>
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <KpiCard
+        label="Receitas pagas"
+        value={maskBRL(data.incomes, true)}
+        icon={ArrowUpRight}
+        hint="entradas do período"
+      />
 
-      {/* Despesas */}
-      <div className="flex items-center gap-4 rounded-lg bg-muted p-4">
-        <ArrowDownRight className="h-6 w-6 text-red-600" />
-        <div>
-          <span className="block text-sm text-muted-foreground">
-            Total de Despesas Pagas
-          </span>
-          <span className="text-lg font-semibold text-red-600">
-            {maskBRL(data.expenses, true)}
-          </span>
-        </div>
-      </div>
+      <KpiCard
+        label="Despesas pagas"
+        value={maskBRL(data.expenses, true)}
+        icon={ArrowDownRight}
+        hint="saídas do período"
+      />
 
-      {/* Receitas de Alunos */}
-      <div className="flex items-center gap-4 rounded-lg bg-muted p-4">
-        <GraduationCap className="h-6 w-6 text-blue-600" />
-        <div>
-          <span className="block text-sm text-muted-foreground">
-            Receitas Pagas de Alunos
-          </span>
-          <span className="text-lg font-semibold text-blue-600">
-            {maskBRL(data.studentIncomes || 0, true)}
-          </span>
-        </div>
-      </div>
+      <KpiCard
+        label="Receitas de alunos"
+        value={maskBRL(data.studentIncomes || 0, true)}
+        icon={GraduationCap}
+        hint="mensalidades quitadas"
+      />
 
-      {/* Saldo */}
-      <div className="flex items-center gap-4 rounded-lg bg-muted p-4">
-        <DollarSign
-          className={`h-6 w-6 ${data.net >= 0 ? 'text-green-600' : 'text-red-600'}`}
-        />
-        <div>
-          <span className="block text-sm text-muted-foreground">Saldo</span>
-          <span
-            className={`text-lg font-semibold ${
-              data.net >= 0 ? 'text-green-600' : 'text-red-600'
-            }`}
-          >
-            {data.net >= 0 ? '' : '-'}
-            {maskBRL(Math.abs(data.net), true)}
-          </span>
-        </div>
-      </div>
+      <KpiCard
+        label="Saldo"
+        value={maskBRL(data.net, true)}
+        icon={Wallet}
+        hint={`${maskBRL(data.incomes, true)} − ${maskBRL(data.expenses, true)}`}
+        tone={data.net >= 0 ? 'positive' : 'negative'}
+      />
     </div>
   );
 };

@@ -24,7 +24,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 export function AdvancedFilterCheckbox({
   showDeleteButton = true,
   ...props
-}: Readonly<AdvancedFilterCheckboxProps>): JSX.Element {
+}: Readonly<AdvancedFilterCheckboxProps>): React.JSX.Element {
   const open = useBoolean(props.open);
   const data = useArrayState<AdvancedFilterCheckboxType>(
     props.defaultValue ?? [],

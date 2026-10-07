@@ -57,6 +57,25 @@ export const unmaskCPF = (value: string): string => {
  * // Exemplo de formatação:
  * maskCellphone("11999999999"); // Retorna "(11) 99999-9999"
  */
+/**
+ * Formata telefone vindo de qualquer lugar: com DDI (5544...), com 11 dígitos
+ * (celular) ou 10 (fixo). Diferente de `maskCellphone`, que é máscara de
+ * digitação, esta é para exibir o que já está salvo.
+ */
+export const formatPhone = (value: string): string => {
+  const digits = (value ?? '').replace(/\D/g, '');
+  const local =
+    digits.length > 11 && digits.startsWith('55') ? digits.slice(2) : digits;
+
+  if (local.length === 11) {
+    return `(${local.slice(0, 2)}) ${local.slice(2, 7)}-${local.slice(7)}`;
+  }
+  if (local.length === 10) {
+    return `(${local.slice(0, 2)}) ${local.slice(2, 6)}-${local.slice(6)}`;
+  }
+  return value;
+};
+
 export const maskCellphone = (value: string): string => {
   return value
     .replace(/\D/g, '')
@@ -240,7 +259,11 @@ export const maskBRL = (value: string | number, isVisible: boolean): string => {
  * maskOnlyText("Olá, Mundo! 123"); // Retorna "Olá Mundo"
  */
 export const maskOnlyText = (value: string): string => {
-  return value.replace(/[^A-Za-zÀ-ÖØ-öø-ÿ\s]/g, ''); // Permite letras acentuadas e espaços
+  // normalize('NFC') junta letra + acento num código só: o teclado do macOS
+  // entrega "ã" como "a" + U+0303, e o acento combinante fica fora da faixa
+  // Latin-1, então era removido e "João" virava "Joao".
+  // \p{L} cobre qualquer letra, em vez de só as da faixa acentuada latina.
+  return value.normalize('NFC').replace(/[^\p{L}\s]/gu, '');
 };
 
 // ----------------------------------- Initials Name Mask Functions -----------------------------------

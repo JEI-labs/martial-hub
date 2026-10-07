@@ -2,7 +2,7 @@
 
 export const Footer = () => {
   return (
-    <footer className="fixed bottom-0 left-0 flex w-full items-center justify-between bg-background p-4 px-8 text-sm text-gray-400 sm:px-16">
+    <footer className="bg-background fixed bottom-0 left-0 flex w-full items-center justify-between p-4 px-8 text-sm text-gray-400 sm:px-16">
       <span className="whitespace-nowrap">
         © {new Date().getFullYear()} Exchange
       </span>

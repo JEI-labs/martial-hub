@@ -9,12 +9,32 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { TRPCReactProvider } from '@/trpc/react';
 import { BreadcrumbProvider } from '@/contexts/breadcrumb';
 import { NextAuthProvider } from '@/server/auth/sessionprovider';
+import { NOME_DO_SISTEMA } from '@/common/constants/sistema';
+import { getCurrentTenant } from '@/server/tenant/resolve';
 
-export const metadata: Metadata = {
-  title: 'ThaiBoxe & Sartorato',
-  description: 'O melhor gerenciador de sistemas de Artes Marciais',
-  icons: [{ rel: 'icon', url: '/favicon.ico' }],
-};
+/**
+ * A aba também é parte da marca.
+ *
+ * Título e ícone saem do endereço, como o resto: a academia aparece com o
+ * nome e a logo dela, e o painel do dono do sistema com os nossos. O que
+ * havia aqui era fixo — o nome e o favicon de uma academia específica, na aba
+ * de todos os clientes.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const tenant = await getCurrentTenant();
+
+  /* Sem logo enviada fica o ícone neutro: a nossa marca na aba de um cliente
+     seria o mesmo erro, invertido. */
+  const icone = tenant?.branding?.logoUrl ?? '/icone-sistema.svg';
+
+  return {
+    title: tenant?.name ?? NOME_DO_SISTEMA,
+    description: tenant
+      ? `Sistema de gestão da ${tenant.name}`
+      : 'Gestão para academias de artes marciais',
+    icons: [{ rel: 'icon', url: icone }],
+  };
+}
 
 export default function RootLayout({
   children,

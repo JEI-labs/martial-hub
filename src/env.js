@@ -13,10 +13,58 @@ export const env = createEnv({
         ? z.string()
         : z.string().optional(),
     DATABASE_URL: z.string().url(),
+    /**
+     * Conexão direta (ou pooler em session mode) usada só pelas migrations.
+     * O pooler em transaction mode não suporta o advisory lock do migrate.
+     * Opcional: caindo para DATABASE_URL quando não definida.
+     */
+    DIRECT_URL: z.string().url().optional(),
     NODE_ENV: z
       .enum(['development', 'test', 'production'])
       .default('development'),
     BLOB_READ_WRITE_TOKEN: z.string(),
+    /**
+     * Evolution do próprio sistema, usada no fluxo de QR code: a academia
+     * conecta o número sem ver URL nem token. Opcionais — sem elas o sistema
+     * só oferece a conexão manual.
+     */
+    EVOLUTION_BASE_URL: z.string().url().optional(),
+    EVOLUTION_API_KEY: z.string().optional(),
+    /** Segredo da rota que dispara as mensagens automáticas. */
+    CRON_SECRET: z.string().optional(),
+    /**
+     * Domínio onde moram os subdomínios das academias
+     * (`academia.seusistema.com.br`). Sem ele, só domínio cadastrado resolve —
+     * é o caso do ambiente local.
+     */
+    ROOT_DOMAIN: z.string().optional(),
+    /**
+     * Endereço do painel do dono do sistema, host completo
+     * (`martialhub.exemplo.com.br`). Pode estar fora do domínio raiz — e é
+     * melhor que esteja, para o painel do negócio não parecer mais uma
+     * academia. Sem ele, vale `app.<ROOT_DOMAIN>`.
+     */
+    MASTER_HOST: z.string().optional(),
+    /**
+     * Token da Hostinger, onde mora a zona do domínio raiz. Com ele, o
+     * subdomínio da academia nova já nasce apontando para o servidor; sem ele,
+     * alguém precisa criar o CNAME na mão.
+     */
+    HOSTINGER_API_TOKEN: z.string().optional(),
+    /**
+     * Para onde o CNAME aponta. A Vercel dá um alvo por projeto (algo como
+     * `abc123.vercel-dns-016.com`) e é ele que deve vir aqui; o genérico
+     * `cname.vercel-dns.com` é só o padrão.
+     */
+    DNS_CNAME_TARGET: z.string().optional(),
+    /**
+     * Credenciais da Vercel para cadastrar o domínio próprio do cliente
+     * sozinho. Sem elas, a tela do master só guarda o domínio e diz que falta
+     * cadastrar na mão.
+     */
+    VERCEL_TOKEN: z.string().optional(),
+    VERCEL_PROJECT_ID: z.string().optional(),
+    VERCEL_TEAM_ID: z.string().optional(),
   },
 
   /**
@@ -36,8 +84,19 @@ export const env = createEnv({
     NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
     AUTH_SECRET: process.env.AUTH_SECRET,
     DATABASE_URL: process.env.DATABASE_URL,
+    DIRECT_URL: process.env.DIRECT_URL,
     NODE_ENV: process.env.NODE_ENV,
     BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN,
+    EVOLUTION_BASE_URL: process.env.EVOLUTION_BASE_URL,
+    EVOLUTION_API_KEY: process.env.EVOLUTION_API_KEY,
+    CRON_SECRET: process.env.CRON_SECRET,
+    ROOT_DOMAIN: process.env.ROOT_DOMAIN,
+    MASTER_HOST: process.env.MASTER_HOST,
+    HOSTINGER_API_TOKEN: process.env.HOSTINGER_API_TOKEN,
+    DNS_CNAME_TARGET: process.env.DNS_CNAME_TARGET,
+    VERCEL_TOKEN: process.env.VERCEL_TOKEN,
+    VERCEL_PROJECT_ID: process.env.VERCEL_PROJECT_ID,
+    VERCEL_TEAM_ID: process.env.VERCEL_TEAM_ID,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially

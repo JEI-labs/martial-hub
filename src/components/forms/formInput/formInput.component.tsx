@@ -1,6 +1,11 @@
+import { FieldHint } from '@/components/forms/fieldHint/fieldHint.component';
 import React from 'react';
 
-import type { FieldValues, UseControllerProps } from 'react-hook-form';
+import type {
+  FieldPath,
+  FieldValues,
+  UseControllerProps,
+} from 'react-hook-form';
 import { Controller } from 'react-hook-form';
 
 import type { FormInputComponentProps } from './formInput.component.types';
@@ -15,7 +20,7 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 
-export const FormInputComponent = <T extends FieldValues>({
+export const FormInputComponent = <T extends FieldValues, TTransformed = T>({
   control,
   name,
   description,
@@ -24,7 +29,8 @@ export const FormInputComponent = <T extends FieldValues>({
   unmask,
   hideErrors,
   ...props
-}: UseControllerProps<T> & FormInputComponentProps): React.JSX.Element => {
+}: UseControllerProps<T, FieldPath<T>, TTransformed> &
+  FormInputComponentProps): React.JSX.Element => {
   const handleRemoveMask = (value: string): string => {
     if (unmask) {
       return unmask(value).toString();
@@ -52,7 +58,10 @@ export const FormInputComponent = <T extends FieldValues>({
             name={name}
             render={({ field }) => (
               <FormItem className={cn(props.generalclassname ?? '')}>
-                <FormLabel>{props.label}</FormLabel>
+                <FormLabel>
+                  {props.label}
+                  {props.tooltip && <FieldHint text={props.tooltip} />}
+                </FormLabel>
                 <FormControl>
                   <div className="relative">
                     {props.icon}
