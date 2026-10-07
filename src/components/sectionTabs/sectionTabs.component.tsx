@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   DollarSign,
+  Dumbbell,
   Bot,
   History,
   Layers3,
@@ -55,6 +56,12 @@ const SECTIONS = {
       href: '/cadastros/planos',
       icon: Package,
       hint: 'Valor e duração da mensalidade.',
+    },
+    {
+      label: 'Modalidades',
+      href: '/cadastros/modalidades',
+      icon: Dumbbell,
+      hint: 'O que a academia ensina.',
     },
     {
       label: 'Aulas',

@@ -14,6 +14,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { SheetContent } from '@/components/ui/sheet';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
 interface FormModalProps {
@@ -35,6 +37,11 @@ interface FormModalProps {
    */
   onDelete?: () => void | Promise<void>;
   deleteLabel?: string;
+  /**
+   * No celular, abre como gaveta subindo de baixo em vez de modal no centro:
+   * fica ao alcance do polegar e o teclado não esconde o botão de salvar.
+   */
+  sheetOnMobile?: boolean;
   children: React.ReactNode;
   className?: string;
 }
@@ -57,18 +64,28 @@ export function FormModal({
   cancelLabel = 'Cancelar',
   onDelete,
   deleteLabel = 'Excluir',
+  sheetOnMobile = false,
   children,
   className,
 }: FormModalProps) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const isMobile = useIsMobile();
+
+  /* Sheet e Dialog são o mesmo primitivo do Radix por baixo: título, descrição
+     e fechar servem aos dois, e só a casca muda. */
+  const asSheet = sheetOnMobile && isMobile;
+  const Content = asSheet ? SheetContent : DialogContent;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* max-h + min-h-0: o modal para de crescer na altura da janela e quem
           rola é o miolo, não a página atrás dele. */}
-      <DialogContent
+      <Content
+        {...(asSheet ? { side: 'bottom' as const } : {})}
         className={cn(
-          'flex max-h-[90vh] w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl',
+          asSheet
+            ? 'flex max-h-[90dvh] flex-col gap-0 overflow-hidden rounded-t-2xl p-0'
+            : 'flex max-h-[90vh] w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl',
           className,
         )}
       >
@@ -123,7 +140,7 @@ export function FormModal({
             }}
           />
         )}
-      </DialogContent>
+      </Content>
     </Dialog>
   );
 }
