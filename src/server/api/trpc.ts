@@ -215,16 +215,51 @@ export const teacherProcedure = exigirPapel([
 /**
  * Procedure do dono do sistema: enxerga todas as academias e não pertence a
  * nenhuma. É o que sustenta o menu master.
+ *
+ * Confere a conta no banco, não só o papel da sessão: a tela de troca de
+ * senha e a de configurar a segunda etapa ficam no layout, e um layout não
+ * protege a API — sem isto, quem tem só a senha temporária de um master
+ * chamaria as rotas direto e pularia as duas.
  */
 export const masterProcedure = t.procedure
   .use(timingMiddleware)
-  .use(({ ctx, next }) => {
+  .use(async ({ ctx, next }) => {
     if (!ctx.session?.user) {
       throw new TRPCError({ code: 'UNAUTHORIZED' });
     }
 
     if (ctx.session.user.role !== EUserRole.MASTER) {
       throw new TRPCError({ code: 'FORBIDDEN' });
+    }
+
+    const conta = await ctx.prisma.user.findUnique({
+      where: { id: ctx.session.user.id },
+      select: {
+        role: true,
+        mustChangePassword: true,
+        twoFactorEnabledAt: true,
+      },
+    });
+
+    /* O papel da sessão é o do momento do login e vale por um dia. Conta que
+       deixou de existir ou de ser master para aqui, não quando o cookie
+       vencer. */
+    if (conta?.role !== EUserRole.MASTER) {
+      throw new TRPCError({ code: 'FORBIDDEN' });
+    }
+
+    if (conta.mustChangePassword) {
+      throw new TRPCError({
+        code: 'FORBIDDEN',
+        message: 'Troque a senha temporária antes de continuar.',
+      });
+    }
+
+    if (!conta.twoFactorEnabledAt) {
+      throw new TRPCError({
+        code: 'FORBIDDEN',
+        message: 'Configure a verificação em duas etapas antes de continuar.',
+      });
     }
 
     return next({

@@ -91,15 +91,3 @@ export async function usarCodigoDeRecuperacao(
 
   return { ok: false, restantes: guardados };
 }
-
-/** Se a conta já configurou a segunda etapa. */
-export async function temDoisFatores(userId: string): Promise<boolean> {
-  const { prisma } = await import('@/server/db');
-
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { twoFactorEnabledAt: true },
-  });
-
-  return Boolean(user?.twoFactorEnabledAt);
-}

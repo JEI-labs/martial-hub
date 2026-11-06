@@ -14,6 +14,12 @@ import {
   protegerCodigos,
 } from '@/server/auth/twoFactor';
 
+/** A mesma regra para quem troca a senha e para quem define a primeira. */
+const novaSenhaSchema = z
+  .string()
+  .min(8, 'A senha nova precisa de pelo menos 8 letras')
+  .max(72);
+
 /** Segurança da própria conta: cada um mexe na sua. */
 export const securityRouter = createTRPCRouter({
   status: sessionProcedure.query(async ({ ctx }) => {
@@ -21,12 +27,14 @@ export const securityRouter = createTRPCRouter({
       where: { id: ctx.session.user.id },
       select: {
         role: true,
+        mustChangePassword: true,
         twoFactorEnabledAt: true,
         twoFactorRecoveryCodes: true,
       },
     });
 
     return {
+      trocarSenha: user.mustChangePassword,
       ativo: Boolean(user.twoFactorEnabledAt),
       desde: user.twoFactorEnabledAt,
       obrigatorio: exigeDoisFatores(user.role),
@@ -191,10 +199,7 @@ export const securityRouter = createTRPCRouter({
     .input(
       z.object({
         atual: z.string().min(1, 'Informe a senha atual'),
-        nova: z
-          .string()
-          .min(8, 'A senha nova precisa de pelo menos 8 letras')
-          .max(72),
+        nova: novaSenhaSchema,
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -212,7 +217,48 @@ export const securityRouter = createTRPCRouter({
 
       await ctx.prisma.user.update({
         where: { id: ctx.session.user.id },
-        data: { password: await hash(input.nova) },
+        /* Trocar por aqui também encerra a senha temporária, se era ela. */
+        data: { password: await hash(input.nova), mustChangePassword: false },
+      });
+
+      return { ok: true };
+    }),
+
+  /**
+   * Primeira senha de uma conta criada por outra pessoa.
+   *
+   * Não pede a atual, ao contrário de `changePassword`: quem está aqui acabou
+   * de entrar com ela, e pedir de novo só faria a pessoa colar a mesma coisa.
+   * O que segura é a trava — só vale enquanto a senha for temporária. Depois
+   * disso a troca volta a ser pela porta que pede a senha atual.
+   */
+  setInitialPassword: sessionProcedure
+    .input(z.object({ nova: novaSenhaSchema }))
+    .mutation(async ({ ctx, input }) => {
+      const user = await ctx.prisma.user.findUniqueOrThrow({
+        where: { id: ctx.session.user.id },
+        select: { password: true, mustChangePassword: true },
+      });
+
+      if (!user.mustChangePassword) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: 'Para trocar a senha, informe a atual na tela de segurança.',
+        });
+      }
+
+      /* A temporária foi vista por quem criou a conta e passou por algum
+         mensageiro: mantê-la seria pular a troca com um clique. */
+      if (await verify(user.password, input.nova)) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Escolha uma senha diferente da temporária.',
+        });
+      }
+
+      await ctx.prisma.user.update({
+        where: { id: ctx.session.user.id },
+        data: { password: await hash(input.nova), mustChangePassword: false },
       });
 
       return { ok: true };

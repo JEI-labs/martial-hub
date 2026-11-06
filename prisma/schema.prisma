@@ -217,6 +217,10 @@ model User {
   email    String
   password String
   role     EUserRole @default(OWNER)
+  /// A senha atual é temporária, gerada por outra pessoa: enquanto for, a
+  /// conta não passa da tela de troca. Quem cria a conta viu essa senha, então
+  /// ela não pode virar a senha de verdade.
+  mustChangePassword Boolean @default(false)
 
   /// Segredo TOTP em base32. Nulo enquanto a pessoa não configurou.
   twoFactorSecret        String?

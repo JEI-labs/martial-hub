@@ -16,7 +16,7 @@ import {
   removeDomain,
   vercelEnabled,
 } from '@/server/vercel/domains';
-import { rootDomain } from '@/server/tenant/resolve';
+import { masterHost, rootDomain } from '@/server/tenant/resolve';
 import {
   apontarSubdominio,
   dnsEnabled,
@@ -24,6 +24,7 @@ import {
   removerSubdominio,
 } from '@/server/dns/hostinger';
 import { recomendaDoisFatores } from '@/server/auth/twoFactor';
+import { gerarSenhaTemporaria } from '@/server/auth/temporaryPassword';
 import { criarBilheteDeSuporte } from '@/server/support/handoff';
 import { DEFAULT_MODALITY } from '@/common/constants/modalities';
 import { slugify } from '@/common/utils/string';
@@ -537,22 +538,87 @@ export const masterRouter = createTRPCRouter({
         /* Só a data em que ligou: segredo e códigos de recuperação são de
            cada um, e não saem daqui nem para outro master. */
         twoFactorEnabledAt: true,
+        mustChangePassword: true,
       },
       orderBy: { createdAt: 'asc' },
     });
 
-    return masters.map(({ twoFactorEnabledAt, ...master }) => ({
-      ...master,
-      souEu: master.id === ctx.session.user.id,
-      /* Para master a segunda etapa é obrigatória, então aqui só existem dois
-         estados — e "pendente" quer dizer que a pessoa está parada na parede,
-         sem conseguir usar o painel. */
-      doisFatores: twoFactorEnabledAt
-        ? ('ativo' as const)
-        : ('pendente' as const),
-      doisFatoresDesde: twoFactorEnabledAt,
-    }));
+    return masters.map(
+      ({ twoFactorEnabledAt, mustChangePassword, ...master }) => ({
+        ...master,
+        souEu: master.id === ctx.session.user.id,
+        /* Conta criada que ainda não entrou: a senha temporária segue
+           valendo e circulando por onde foi mandada. */
+        primeiroAcessoPendente: mustChangePassword,
+        /* Para master a segunda etapa é obrigatória, então aqui só existem
+           dois estados — e "pendente" quer dizer que a pessoa está parada na
+           parede, sem conseguir usar o painel. */
+        doisFatores: twoFactorEnabledAt
+          ? ('ativo' as const)
+          : ('pendente' as const),
+        doisFatoresDesde: twoFactorEnabledAt,
+      }),
+    );
   }),
+
+  /**
+   * Cria outra conta master.
+   *
+   * A senha é gerada aqui e não escolhida por quem cria: ela vai passar pela
+   * mão de duas pessoas e por algum mensageiro, então só serve para o
+   * primeiro acesso. A conta nasce com a troca obrigatória e sem segunda
+   * etapa — e o layout e o `masterProcedure` não a deixam fazer nada antes
+   * das duas.
+   *
+   * Devolve a senha uma única vez. No banco só fica o hash.
+   */
+  createMaster: masterProcedure
+    .input(
+      z.object({
+        name: z.string().trim().min(2, 'Nome muito curto').max(80),
+        email: z.string().trim().email('E-mail inválido'),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const email = input.email.toLowerCase();
+
+      /* O unique do banco é (tenantId, email), e no Postgres nulo nunca é
+         igual a nulo: dois masters com o mesmo e-mail passariam por ele. O
+         login de master busca por e-mail e pegaria qualquer um dos dois. */
+      const jaExiste = await ctx.prisma.user.findFirst({
+        where: { email, tenantId: null },
+        select: { id: true },
+      });
+
+      if (jaExiste) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Já existe uma conta master com este e-mail.',
+        });
+      }
+
+      const senhaTemporaria = gerarSenhaTemporaria();
+
+      await ctx.prisma.user.create({
+        data: {
+          name: input.name,
+          email,
+          password: await hash(senhaTemporaria),
+          role: EUserRole.MASTER,
+          mustChangePassword: true,
+        },
+      });
+
+      const casa = masterHost();
+
+      return {
+        email,
+        senhaTemporaria,
+        /* Onde a pessoa entra. Sem domínio configurado (desenvolvimento) a
+           tela usa o próprio endereço em que está. */
+        endereco: casa ? `https://${casa}/auth/entrar` : null,
+      };
+    }),
 
   /* -------------------------------------------------------------- faturas */
 
