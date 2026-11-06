@@ -2,7 +2,14 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
-import { Check, Copy, Loader2, ShieldAlert, ShieldCheck } from 'lucide-react';
+import {
+  Check,
+  Copy,
+  Loader2,
+  RotateCw,
+  ShieldAlert,
+  ShieldCheck,
+} from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -31,7 +38,14 @@ export function TwoFactorCard() {
   const { toast } = useToast();
   const utils = api.useUtils();
 
-  const { data: status, isLoading } = api.security.status.useQuery();
+  const {
+    data: status,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isFetching,
+  } = api.security.status.useQuery();
   const [segredo, setSegredo] = useState<{
     qr: string;
     segredo: string;
@@ -106,6 +120,43 @@ export function TwoFactorCard() {
         variant: 'destructive',
       }),
   });
+
+  /* Sem dado e sem carregar é erro. Antes isto também caía no esqueleto, e a
+     tela da segunda etapa — que para master é a única saída — ficava cinza
+     para sempre, sem dizer o que houve nem deixar tentar de novo. */
+  if (isError && !status) {
+    const sessaoVencida = error.data?.code === 'UNAUTHORIZED';
+
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Verificação em duas etapas</CardTitle>
+          <CardDescription>
+            {sessaoVencida
+              ? 'A sua sessão expirou. Saia e entre de novo para continuar.'
+              : 'Não deu para carregar a situação da sua conta. Confira a conexão e tente de novo.'}
+          </CardDescription>
+        </CardHeader>
+
+        {!sessaoVencida && (
+          <CardContent>
+            <Button
+              variant="outline"
+              disabled={isFetching}
+              onClick={() => void refetch()}
+            >
+              {isFetching ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <RotateCw className="mr-2 size-4" />
+              )}
+              Tentar de novo
+            </Button>
+          </CardContent>
+        )}
+      </Card>
+    );
+  }
 
   if (isLoading || !status) return <Skeleton className="h-64 w-full" />;
 
