@@ -7,7 +7,6 @@ import {
 } from '@prisma/client';
 import { hash } from 'argon2';
 
-import { DEFAULT_MODALITY } from '../src/common/constants/modalities';
 import { slugify } from '../src/common/utils/string';
 
 const prisma = new PrismaClient({
@@ -77,15 +76,16 @@ async function main() {
     });
   }
 
-  // 5. A modalidade com que toda academia nasce.
+  // 5. A modalidade da academia de exemplo — é uma academia de Muay Thai.
+  const MODALIDADE = 'Muay Thai';
   await prisma.modality.upsert({
     where: {
-      tenantId_slug: { tenantId: tenant.id, slug: slugify(DEFAULT_MODALITY) },
+      tenantId_slug: { tenantId: tenant.id, slug: slugify(MODALIDADE) },
     },
     update: {},
     create: {
-      name: DEFAULT_MODALITY,
-      slug: slugify(DEFAULT_MODALITY),
+      name: MODALIDADE,
+      slug: slugify(MODALIDADE),
       tenantId: tenant.id,
     },
   });

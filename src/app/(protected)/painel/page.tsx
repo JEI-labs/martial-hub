@@ -40,6 +40,7 @@ import {
   TopOverdueList,
 } from '@/components/dashboard/dashboardLists.component';
 import { BillingAlert } from '@/components/tenant/billingAlert.component';
+import { ModalitiesPendingAlert } from '@/components/modalities/modalitiesPendingAlert.component';
 import { api } from '@/trpc/react';
 import { useSession } from 'next-auth/react';
 import { maskBRL } from '@/utils/masksUtils';
@@ -121,6 +122,15 @@ export default function DashboardPage() {
         {/* Conta a pagar do próprio sistema: assunto do dono, não da
             recepção. */}
         {session?.user.role === 'OWNER' && <BillingAlert />}
+
+        {/* Master em suporte também cadastra: ownerProcedure deixa. */}
+        {session && (
+          <ModalitiesPendingAlert
+            podeCadastrar={
+              session.user.role === 'OWNER' || session.user.role === 'MASTER'
+            }
+          />
+        )}
 
         {isLoading || !data ? (
           <div className="flex flex-col gap-6">

@@ -10,6 +10,20 @@ vi.mock('@/server/auth', () => ({ getServerAuthSession: vi.fn() }));
 /* O roteador do master puxa módulos marcados como só-de-servidor. Fora do
    Next a marca não tem com quem conversar e só derrubaria o import. */
 vi.mock('server-only', () => ({}));
+/* Criar academia põe o endereço no ar. Num teste isso nunca pode chegar à
+   Vercel nem ao DNS de verdade, esteja o .env como estiver. */
+vi.mock('@/server/vercel/domains', () => ({
+  vercelEnabled: () => false,
+  addDomain: vi.fn(),
+  domainStatus: vi.fn(),
+  removeDomain: vi.fn(),
+}));
+vi.mock('@/server/dns/hostinger', () => ({
+  dnsEnabled: () => false,
+  nomeNaZona: () => null,
+  apontarSubdominio: vi.fn(),
+  removerSubdominio: vi.fn(),
+}));
 
 const { prisma } = await import('@/server/db');
 const { createCallerFactory, createTRPCRouter } =
@@ -22,6 +36,7 @@ const createCaller = createCallerFactory(
 );
 
 const criados: Array<string> = [];
+const academiasCriadas: Array<string> = [];
 
 /** Uma conta master no banco, do jeito que o teste precisar. */
 const novoMaster = async (
@@ -67,11 +82,93 @@ const como = (user: { id: string; email: string }) =>
   });
 
 afterAll(async () => {
+  /* A academia leva junto dono, modalidades e o resto, em cascata. */
+  await prisma.tenant.deleteMany({ where: { slug: { in: academiasCriadas } } });
   await prisma.user.deleteMany({ where: { id: { in: criados } } });
   await prisma.user.deleteMany({
     where: { tenantId: null, email: { endsWith: '@novo-master.com' } },
   });
   await prisma.$disconnect();
+});
+
+describe('createTenant escolhe as modalidades', () => {
+  /** Cria uma academia com o que o teste disser de modalidade. */
+  const criarAcademia = async (modalities?: Array<string>) => {
+    const eu = await novoMaster();
+    const slug = `t-${randomUUID().slice(0, 8)}`;
+    academiasCriadas.push(slug);
+
+    const resultado = await como(eu).master.createTenant({
+      name: 'Academia de teste',
+      slug,
+      priceCents: 14900,
+      billingDay: 10,
+      ownerName: 'Dono de teste',
+      ownerEmail: `dono-${slug}@teste.com`,
+      ownerPassword: 'segredo-123',
+      ...(modalities ? { modalities } : {}),
+    });
+
+    const modalidades = await prisma.modality.findMany({
+      where: { tenantId: resultado.id },
+      orderBy: { position: 'asc' },
+      select: { name: true, slug: true, isActive: true, position: true },
+    });
+
+    return { slug, modalidades };
+  };
+
+  it('cria as escolhidas, ativas e na ordem mostrada', async () => {
+    const { modalidades } = await criarAcademia([
+      'Muay Thai',
+      'Jiu-Jitsu',
+      'Karatê',
+    ]);
+
+    expect(modalidades).toEqual([
+      { name: 'Muay Thai', slug: 'muay-thai', isActive: true, position: 0 },
+      { name: 'Jiu-Jitsu', slug: 'jiu-jitsu', isActive: true, position: 1 },
+      { name: 'Karatê', slug: 'karate', isActive: true, position: 2 },
+    ]);
+  });
+
+  it('sem nenhuma escolhida, nasce com as modalidades pendentes', async () => {
+    for (const escolha of [undefined, []]) {
+      const { modalidades } = await criarAcademia(escolha);
+
+      expect(modalidades).toEqual([]);
+    }
+  });
+
+  it('nome repetido vira um só, em vez de derrubar a criação', async () => {
+    const { modalidades } = await criarAcademia(['Boxe', ' boxe ', 'MMA']);
+
+    expect(modalidades.map((m) => [m.name, m.position])).toEqual([
+      ['Boxe', 0],
+      ['MMA', 1],
+    ]);
+  });
+
+  it('modalidade inválida não deixa academia pela metade', async () => {
+    const eu = await novoMaster();
+    const slug = `t-${randomUUID().slice(0, 8)}`;
+    academiasCriadas.push(slug);
+
+    await expect(
+      como(eu).master.createTenant({
+        name: 'Academia de teste',
+        slug,
+        priceCents: 14900,
+        billingDay: 10,
+        ownerName: 'Dono de teste',
+        ownerEmail: `dono-${slug}@teste.com`,
+        ownerPassword: 'segredo-123',
+        modalities: ['Boxe', 'x'.repeat(51)],
+      }),
+    ).rejects.toThrow();
+
+    expect(await prisma.tenant.findUnique({ where: { slug } })).toBeNull();
+  });
 });
 
 describe('createMaster', () => {

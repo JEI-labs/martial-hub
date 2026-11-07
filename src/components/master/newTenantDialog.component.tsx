@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { MODALITY_CATALOG } from '@/common/constants/modalities';
 import { TENANT_STATUS_LIST } from '@/common/constants/tenantStatus';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/trpc/react';
@@ -57,6 +58,23 @@ export function NewTenantDialog({
   const [ownerName, setOwnerName] = useState('');
   const [ownerEmail, setOwnerEmail] = useState('');
   const [ownerPassword, setOwnerPassword] = useState('');
+  const [modalidades, setModalidades] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+
+  /* Na ordem do catálogo, e não na ordem dos cliques: é a ordem que a tela
+     mostra, e é a que a academia vai ver nas telas dela. */
+  const modalidadesEscolhidas = MODALITY_CATALOG.filter((nome) =>
+    modalidades.has(nome),
+  );
+
+  const alternarModalidade = (nome: string) =>
+    setModalidades((atual) => {
+      const proxima = new Set(atual);
+      if (proxima.has(nome)) proxima.delete(nome);
+      else proxima.add(nome);
+      return proxima;
+    });
 
   const criar = api.master.createTenant.useMutation({
     onSuccess: (resultado) => {
@@ -77,6 +95,7 @@ export function NewTenantDialog({
       setOwnerName('');
       setOwnerEmail('');
       setOwnerPassword('');
+      setModalidades(new Set());
       onCreated();
       onOpenChange(false);
     },
@@ -101,8 +120,8 @@ export function NewTenantDialog({
         <DialogHeader>
           <DialogTitle>Nova academia</DialogTitle>
           <DialogDescription>
-            Ela nasce com endereço, assinatura, o acesso do dono e a categoria
-            que recebe as mensalidades.
+            Ela nasce com endereço, assinatura, o acesso do dono, as modalidades
+            que ensina e a categoria que recebe as mensalidades.
           </DialogDescription>
         </DialogHeader>
 
@@ -180,6 +199,38 @@ export function NewTenantDialog({
             </Select>
           </div>
 
+          <div className="space-y-2 sm:col-span-2">
+            <Label id="t-modalidades">Modalidades</Label>
+            <div
+              role="group"
+              aria-labelledby="t-modalidades"
+              className="flex flex-wrap gap-2"
+            >
+              {MODALITY_CATALOG.map((nome) => {
+                const escolhida = modalidades.has(nome);
+
+                return (
+                  <Button
+                    key={nome}
+                    type="button"
+                    size="sm"
+                    variant={escolhida ? 'default' : 'outline'}
+                    aria-pressed={escolhida}
+                    className="rounded-full font-normal"
+                    onClick={() => alternarModalidade(nome)}
+                  >
+                    {nome}
+                  </Button>
+                );
+              })}
+            </div>
+            <p className="text-muted-foreground text-xs">
+              {modalidadesEscolhidas.length
+                ? 'O dono muda, renomeia e acrescenta outras depois, em Cadastros.'
+                : 'Nenhuma escolhida: as modalidades ficam pendentes, e o painel da academia avisa o dono para cadastrar.'}
+            </p>
+          </div>
+
           <div className="bg-muted/60 space-y-4 rounded-xl p-4 sm:col-span-2">
             <p className="text-muted-foreground text-xs">
               Acesso do dono da academia. O sistema não manda e-mail: passe
@@ -235,6 +286,7 @@ export function NewTenantDialog({
                 ownerName: ownerName.trim(),
                 ownerEmail: ownerEmail.trim(),
                 ownerPassword,
+                modalities: modalidadesEscolhidas,
               })
             }
           >

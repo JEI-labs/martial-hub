@@ -26,8 +26,8 @@ import {
 import { recomendaDoisFatores } from '@/server/auth/twoFactor';
 import { gerarSenhaTemporaria } from '@/server/auth/temporaryPassword';
 import { criarBilheteDeSuporte } from '@/server/support/handoff';
-import { DEFAULT_MODALITY } from '@/common/constants/modalities';
 import { slugify } from '@/common/utils/string';
+import { modalityNameSchema } from '@/server/validations/modalities';
 import {
   DIAS_DE_AVISO,
   aplicarRegraDeCobranca,
@@ -35,6 +35,31 @@ import {
 } from '@/server/billing/invoices';
 
 const CENTS = 100;
+
+/**
+ * As modalidades com que a academia nasce, na ordem escolhida.
+ *
+ * Nome repetido ("Boxe" e "boxe") vira um só, porque o slug é único por
+ * academia e repetir derrubaria a criação inteira. Nenhuma escolhida é uma
+ * resposta válida: a academia nasce com as modalidades pendentes, e o painel
+ * dela avisa o dono até ele cadastrar — melhor do que chutar uma que ela
+ * talvez nem ensine.
+ */
+function modalidadesIniciais(nomes: Array<string>) {
+  const vistos = new Set<string>();
+  const unicos = nomes.filter((nome) => {
+    const slug = slugify(nome);
+    if (!slug || vistos.has(slug)) return false;
+    vistos.add(slug);
+    return true;
+  });
+
+  return unicos.map((name, position) => ({
+    name,
+    slug: slugify(name),
+    position,
+  }));
+}
 
 /** Slug vira subdomínio, então o alfabeto é o da URL. */
 const slugSchema = z
@@ -305,7 +330,8 @@ export const masterRouter = createTRPCRouter({
   /**
    * Nasce pronta para usar: academia, endereço, assinatura, dono, a
    * categoria fixa que recebe as mensalidades — sem ela, matricular aluno
-   * quebra no primeiro pagamento — e uma modalidade ativa.
+   * quebra no primeiro pagamento — e as modalidades que ela ensina, quando
+   * quem cria já sabe quais são.
    */
   createTenant: masterProcedure
     .input(
@@ -318,9 +344,13 @@ export const masterRouter = createTRPCRouter({
         ownerName: z.string().min(2).max(80),
         ownerEmail: z.string().email(),
         ownerPassword: z.string().min(6),
+        /** O que a academia ensina, na ordem em que vai aparecer. */
+        modalities: z.array(modalityNameSchema).max(20).default([]),
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const modalidades = modalidadesIniciais(input.modalities);
+
       const existe = await ctx.prisma.tenant.findUnique({
         where: { slug: input.slug },
       });
@@ -363,12 +393,11 @@ export const masterRouter = createTRPCRouter({
                 isFixed: true,
               },
             },
-            modalities: {
-              create: {
-                name: DEFAULT_MODALITY,
-                slug: slugify(DEFAULT_MODALITY),
-              },
-            },
+            /* Dentro da mesma criação: modalidade que falha desfaz a
+               academia inteira, em vez de deixá-la pela metade. */
+            ...(modalidades.length
+              ? { modalities: { create: modalidades } }
+              : {}),
             ...(hostname
               ? {
                   /* Sem `verifiedAt`: quem diz se o endereço está de pé é o
