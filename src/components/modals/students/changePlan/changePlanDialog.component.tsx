@@ -28,28 +28,41 @@ import { api } from '@/trpc/react';
 import { maskBRL } from '@/utils/masksUtils';
 import { installmentCount, splitIntoInstallments } from '@/utils/planUtils';
 
+/** A matrícula cujo plano vai trocar. */
+export interface EnrollmentToChange {
+  id: string;
+  planId: string;
+  planName: string;
+  modality: { name: string };
+}
+
 interface ChangePlanDialogProps {
   studentId: string;
   studentName: string;
-  /** Plano em vigor, para não oferecer a troca por ele mesmo. */
-  currentPlanId?: string | null;
-  currentPlanName?: string | null;
+  /**
+   * Com matrícula, troca o plano dela. Sem, matricula o aluno numa
+   * modalidade que ele ainda não faz.
+   */
+  enrollment?: EnrollmentToChange | null;
+  /** Modalidades em que o aluno já está matriculado: não são oferecidas. */
+  enrolledModalityIds?: Array<string>;
   open: boolean;
   onOpenChange: (_open: boolean) => void;
   onChanged?: () => void;
 }
 
 /**
- * Troca de plano do aluno. Vale de hoje: a matrícula atual encerra e a nova
- * começa no plano escolhido. O texto de prévia existe porque a troca mexe em
- * parcela e em dinheiro — quem clica precisa saber o que vai acontecer antes
- * de confirmar, não depois.
+ * Troca de plano de uma matrícula, ou matrícula numa modalidade nova. Vale de
+ * hoje: na troca, a matrícula daquela modalidade encerra e a nova começa no
+ * plano escolhido; as outras modalidades do aluno não mudam. O texto de
+ * prévia existe porque isso mexe em parcela e em dinheiro — quem clica
+ * precisa saber o que vai acontecer antes de confirmar, não depois.
  */
 export function ChangePlanDialog({
   studentId,
   studentName,
-  currentPlanId,
-  currentPlanName,
+  enrollment,
+  enrolledModalityIds = [],
   open,
   onOpenChange,
   onChanged,
@@ -57,17 +70,38 @@ export function ChangePlanDialog({
   const { toast } = useToast();
   const utils = api.useUtils();
   const [planId, setPlanId] = useState('');
+  const [modalityId, setModalityId] = useState('');
 
   const { data: plansData, isLoading } = api.plans.getAll.useQuery(
     { page: 1, limit: 100 },
     { enabled: open },
   );
 
-  useResetOnChange([studentId, open], () => setPlanId(''));
+  /* Sem matrícula o diálogo é de matrícula, não de troca — mesma mecânica,
+     mais a escolha da modalidade. */
+  const isEnrolling = !enrollment;
+  const currentPlanId = enrollment?.planId ?? null;
+  const currentPlanName = enrollment?.planName ?? null;
 
-  /* Sem matrícula em vigor o diálogo é de matrícula, não de troca — mesma
-     mecânica, outro texto. */
-  const isEnrolling = !currentPlanId;
+  const { data: modalidades } = api.modalities.list.useQuery(undefined, {
+    enabled: open && isEnrolling,
+  });
+  const modalidadesLivres = (modalidades ?? []).filter(
+    (m) => m.isActive && !enrolledModalityIds.includes(m.id),
+  );
+  const modalidadeEscolhida = isEnrolling
+    ? modalidadesLivres.find((m) => m.id === modalityId)
+    : null;
+
+  useResetOnChange([studentId, enrollment?.id, open], () => {
+    setPlanId('');
+    setModalityId('');
+  });
+
+  /* Uma modalidade só para escolher já vem escolhida. */
+  const unicaLivre =
+    modalidadesLivres.length === 1 ? modalidadesLivres[0]?.id : undefined;
+  if (isEnrolling && unicaLivre && !modalityId) setModalityId(unicaLivre);
 
   const options = (plansData?.data ?? []).filter(
     (plan) => plan.id !== currentPlanId,
@@ -81,6 +115,15 @@ export function ChangePlanDialog({
       )
     : [];
 
+  const depois = () => {
+    utils.student.invalidate();
+    utils.payment.invalidate();
+    utils.finance.invalidate();
+    utils.dashboard.invalidate();
+    onChanged?.();
+    onOpenChange(false);
+  };
+
   const changePlan = api.student.changePlan.useMutation({
     onSuccess: (result) => {
       toast({
@@ -90,13 +133,7 @@ export function ChangePlanDialog({
             ? `${result.cancelled} parcela(s) ainda não vencida(s) do plano anterior foram canceladas.`
             : 'A nova matrícula já está valendo.',
       });
-
-      utils.student.invalidate();
-      utils.payment.invalidate();
-      utils.finance.invalidate();
-      utils.dashboard.invalidate();
-      onChanged?.();
-      onOpenChange(false);
+      depois();
     },
     onError: (error) =>
       toast({
@@ -106,20 +143,44 @@ export function ChangePlanDialog({
       }),
   });
 
+  const addEnrollment = api.student.addEnrollment.useMutation({
+    onSuccess: () => {
+      toast({
+        title: 'Aluno matriculado',
+        description: modalidadeEscolhida
+          ? `A matrícula em ${modalidadeEscolhida.name} já está valendo.`
+          : 'A matrícula já está valendo.',
+      });
+      depois();
+    },
+    onError: (error) =>
+      toast({
+        title: 'Não deu para matricular',
+        description: error.message,
+        variant: 'destructive',
+      }),
+  });
+
+  const pending = changePlan.isPending || addEnrollment.isPending;
+  const podeConfirmar =
+    Boolean(selected) && (!isEnrolling || Boolean(modalidadeEscolhida));
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {isEnrolling ? 'Matricular aluno' : 'Trocar plano'}
+            {isEnrolling
+              ? 'Matricular em uma modalidade'
+              : `Trocar plano de ${enrollment.modality.name}`}
           </DialogTitle>
           <DialogDescription>
             {studentName}
             {isEnrolling
-              ? ' · sem matrícula em vigor'
-              : currentPlanName
-                ? ` · hoje no plano ${currentPlanName}`
-                : ''}
+              ? enrolledModalityIds.length > 0
+                ? ' · as matrículas que ele já tem continuam como estão'
+                : ' · sem matrícula em vigor'
+              : ` · hoje no plano ${currentPlanName}`}
           </DialogDescription>
         </DialogHeader>
 
@@ -127,8 +188,36 @@ export function ChangePlanDialog({
           <Skeleton className="h-10 w-full" />
         ) : (
           <div className="flex flex-col gap-4">
+            {isEnrolling && (
+              <div className="space-y-2">
+                <Label className="text-xs">Modalidade</Label>
+                {modalidadesLivres.length === 0 ? (
+                  <p className="text-muted-foreground text-sm">
+                    {modalidades && modalidades.length === 0
+                      ? 'A academia ainda não cadastrou modalidades. Cadastre em Cadastros → Modalidades.'
+                      : 'O aluno já está matriculado em todas as modalidades ativas.'}
+                  </p>
+                ) : (
+                  <Select value={modalityId} onValueChange={setModalityId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Escolha a modalidade" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {modalidadesLivres.map((m) => (
+                        <SelectItem key={m.id} value={m.id}>
+                          {m.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            )}
+
             <div className="space-y-2">
-              <Label className="text-xs">Novo plano</Label>
+              <Label className="text-xs">
+                {isEnrolling ? 'Plano' : 'Novo plano'}
+              </Label>
               <Select value={planId} onValueChange={setPlanId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Escolha o plano" />
@@ -149,17 +238,24 @@ export function ChangePlanDialog({
             {selected && (
               <ul className="bg-muted/60 text-muted-foreground space-y-1 rounded-xl px-4 py-3 text-sm">
                 {isEnrolling ? (
-                  <li>A matrícula no {selected.name} começa hoje.</li>
+                  <li>
+                    A matrícula
+                    {modalidadeEscolhida
+                      ? ` em ${modalidadeEscolhida.name}`
+                      : ''}{' '}
+                    no {selected.name} começa hoje.
+                  </li>
                 ) : (
                   <>
                     <li>
-                      A matrícula{' '}
-                      {currentPlanName ? `de ${currentPlanName} ` : ''}
-                      encerra hoje e a do {selected.name} começa.
+                      A matrícula de {enrollment.modality.name} no{' '}
+                      {currentPlanName} encerra hoje e a do {selected.name}{' '}
+                      começa.
                     </li>
                     <li>
                       Parcelas ainda não vencidas do plano anterior são
-                      canceladas; as atrasadas continuam a ser cobradas.
+                      canceladas; as atrasadas continuam a ser cobradas. As
+                      outras modalidades do aluno não mudam.
                     </li>
                   </>
                 )}
@@ -178,14 +274,24 @@ export function ChangePlanDialog({
             Cancelar
           </Button>
           <Button
-            disabled={!selected || changePlan.isPending}
-            onClick={() =>
-              selected && changePlan.mutate({ studentId, planId: selected.id })
-            }
+            disabled={!podeConfirmar || pending}
+            onClick={() => {
+              if (!selected) return;
+              if (enrollment) {
+                changePlan.mutate({
+                  enrollmentId: enrollment.id,
+                  planId: selected.id,
+                });
+              } else if (modalidadeEscolhida) {
+                addEnrollment.mutate({
+                  studentId,
+                  modalityId: modalidadeEscolhida.id,
+                  planId: selected.id,
+                });
+              }
+            }}
           >
-            {changePlan.isPending && (
-              <Loader2 className="mr-2 size-4 animate-spin" />
-            )}
+            {pending && <Loader2 className="mr-2 size-4 animate-spin" />}
             {isEnrolling ? 'Matricular' : 'Trocar plano'}
           </Button>
         </DialogFooter>

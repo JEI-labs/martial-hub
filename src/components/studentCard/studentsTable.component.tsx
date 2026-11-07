@@ -11,6 +11,7 @@ import {
   CreditCard,
   Edit2,
   MessageCircle,
+  Plus,
   Repeat,
   Trash2,
   UserMinus,
@@ -33,7 +34,11 @@ import { CancelEnrollmentDialog } from '@/components/modals/students/cancelEnrol
 import ConfirmDeleteDialog from '@/components/confirmDeleteDialog/confirmDeleteDialog.component';
 import { cn } from '@/lib/utils';
 import { getInitials } from '@/utils/masksUtils';
-import type { StudentRow, StudentsTableProps } from './studentCard.types';
+import type {
+  ActiveEnrollmentRow,
+  StudentRow,
+  StudentsTableProps,
+} from './studentCard.types';
 
 export function StudentsTable({
   students,
@@ -49,8 +54,43 @@ export function StudentsTable({
   const [payFor, setPayFor] = useState<{ id: string; name: string } | null>(
     null,
   );
-  const [changePlanFor, setChangePlanFor] = useState<StudentRow | null>(null);
-  const [cancelFor, setCancelFor] = useState<StudentRow | null>(null);
+  /* Matrícula é por modalidade: os diálogos guardam o aluno e qual
+     matrícula (nenhuma = matricular numa modalidade nova). */
+  const [changePlanFor, setChangePlanFor] = useState<{
+    student: StudentRow;
+    enrollment: ActiveEnrollmentRow | null;
+  } | null>(null);
+  const [cancelFor, setCancelFor] = useState<{
+    student: StudentRow;
+    enrollment: ActiveEnrollmentRow;
+  } | null>(null);
+
+  /* Com uma modalidade só o menu fica como era ("Trocar plano"); com
+     várias, cada ação diz de qual modalidade é. */
+  const acoesDeMatricula = (student: StudentRow) => {
+    const ativas = student.activeEnrollments;
+    const deQual = (e: ActiveEnrollmentRow) =>
+      ativas.length > 1 ? ` de ${e.modality.name}` : '';
+
+    return [
+      ...ativas.map((enrollment) => ({
+        label: `Trocar plano${deQual(enrollment)}`,
+        icon: Repeat,
+        onSelect: () => setChangePlanFor({ student, enrollment }),
+      })),
+      {
+        label:
+          ativas.length > 0 ? 'Matricular em outra modalidade' : 'Matricular',
+        icon: Plus,
+        onSelect: () => setChangePlanFor({ student, enrollment: null }),
+      },
+      ...ativas.map((enrollment) => ({
+        label: `Cancelar matrícula${ativas.length > 1 ? ` em ${enrollment.modality.name}` : ''}`,
+        icon: UserMinus,
+        onSelect: () => setCancelFor({ student, enrollment }),
+      })),
+    ];
+  };
 
   if (students.length === 0) {
     return (
@@ -69,7 +109,7 @@ export function StudentsTable({
             <TableRow>
               <TableHead>Aluno</TableHead>
               <TableHead>Matrícula</TableHead>
-              <TableHead>Plano</TableHead>
+              <TableHead>Modalidades</TableHead>
               <TableHead>Graduação</TableHead>
               <TableHead>Matriculado em</TableHead>
               <TableHead className="w-[150px]">Pagamento</TableHead>
@@ -129,11 +169,25 @@ export function StudentsTable({
                 </TableCell>
 
                 <TableCell>
-                  {/* Plano não é alerta: o vermelho fixo competia com o
+                  {/* O que o aluno faz, uma pílula por modalidade, com o
+                      plano. Não é alerta: o vermelho fixo competia com o
                       status ao lado e ignorava a cor da academia. */}
-                  <span className="bg-secondary text-secondary-foreground rounded-full px-2 py-1 text-xs font-medium whitespace-nowrap">
-                    {student.planName}
-                  </span>
+                  <div className="flex flex-wrap gap-1">
+                    {student.activeEnrollments.length === 0 ? (
+                      <span className="text-muted-foreground text-xs">
+                        Sem plano
+                      </span>
+                    ) : (
+                      student.activeEnrollments.map((enrollment) => (
+                        <span
+                          key={enrollment.id}
+                          className="bg-secondary text-secondary-foreground rounded-full px-2 py-1 text-xs font-medium whitespace-nowrap"
+                        >
+                          {enrollment.modality.name} · {enrollment.planName}
+                        </span>
+                      ))
+                    )}
+                  </div>
                 </TableCell>
 
                 <TableCell>
@@ -177,20 +231,7 @@ export function StudentsTable({
                         onSelect: () =>
                           router.push(`/alunos/${student.id}/pagamentos`),
                       },
-                      {
-                        label: student.planId ? 'Trocar plano' : 'Matricular',
-                        icon: Repeat,
-                        onSelect: () => setChangePlanFor(student),
-                      },
-                      ...(student.planId
-                        ? [
-                            {
-                              label: 'Cancelar matrícula',
-                              icon: UserMinus,
-                              onSelect: () => setCancelFor(student),
-                            },
-                          ]
-                        : []),
+                      ...acoesDeMatricula(student),
                       {
                         label: 'Enviar mensagem',
                         icon: MessageCircle,
@@ -228,9 +269,11 @@ export function StudentsTable({
 
       {cancelFor && (
         <CancelEnrollmentDialog
-          studentId={cancelFor.id}
-          studentName={cancelFor.name}
-          planName={cancelFor.planName}
+          enrollmentId={cancelFor.enrollment.id}
+          studentName={cancelFor.student.name}
+          modalityName={cancelFor.enrollment.modality.name}
+          planName={cancelFor.enrollment.planName}
+          otherActive={cancelFor.student.activeEnrollments.length - 1}
           open={Boolean(cancelFor)}
           onOpenChange={(open) => !open && setCancelFor(null)}
         />
@@ -238,10 +281,12 @@ export function StudentsTable({
 
       {changePlanFor && (
         <ChangePlanDialog
-          studentId={changePlanFor.id}
-          studentName={changePlanFor.name}
-          currentPlanId={changePlanFor.planId}
-          currentPlanName={changePlanFor.planName}
+          studentId={changePlanFor.student.id}
+          studentName={changePlanFor.student.name}
+          enrollment={changePlanFor.enrollment}
+          enrolledModalityIds={changePlanFor.student.activeEnrollments.map(
+            (e) => e.modality.id,
+          )}
           open={Boolean(changePlanFor)}
           onOpenChange={(open) => !open && setChangePlanFor(null)}
         />

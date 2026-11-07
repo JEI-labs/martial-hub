@@ -229,7 +229,6 @@ describe('a faixa do aluno', () => {
       name: 'Nome novo',
       email: aluno.email,
       phone: aluno.phone,
-      planId: randomUUID(),
       avatarUrl: null,
       birthDate: '01/01/2000',
     });

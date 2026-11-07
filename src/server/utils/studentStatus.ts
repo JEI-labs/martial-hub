@@ -1,38 +1,43 @@
-import type { Enrollment, Payment, Plan } from '@prisma/client';
+import type { Enrollment, Payment } from '@prisma/client';
 
 export type StudentStatus =
   'EM DIA' | 'PENDENTE' | 'ATRASADO' | 'SEM MATRÍCULA';
 
-type EnrollmentWithPlan = Enrollment & { plan?: Plan | null };
+type EnrollmentLike = Pick<Enrollment, 'id' | 'startDate' | 'endDate'>;
+type PaymentLike = Pick<Payment, 'status' | 'dueDate'> & {
+  enrollmentId?: string | null;
+};
+
+const GRAVIDADE: Record<StudentStatus, number> = {
+  'SEM MATRÍCULA': 0,
+  'EM DIA': 1,
+  'PENDENTE': 2,
+  'ATRASADO': 3,
+};
 
 /**
- * Status de matrícula derivado dos pagamentos dentro da vigência da matrícula
- * ativa. Extraído de `students.getAll` para o detalhe do aluno usar exatamente
- * a mesma regra — duas implementações divergiriam com o tempo.
+ * Status de uma matrícula, pelas parcelas dela.
+ *
+ * Parcela ligada à matrícula é dela. Parcela antiga sem matrícula (só existe
+ * de antes de a parcela saber de qual matrícula é) conta pelo período, como
+ * era a regra antes.
  */
-export function deriveStudentStatus(
-  payments: Array<Payment>,
-  activeEnrollment: EnrollmentWithPlan | null | undefined,
-  now: Date = new Date(),
+function statusDaMatricula(
+  payments: Array<PaymentLike>,
+  enrollment: EnrollmentLike,
+  now: Date,
 ): StudentStatus {
-  /* Matrícula cancelada não é aluno em dia: sem contrato em vigor não há o
-     que estar em dia com. */
-  if (!activeEnrollment) return 'SEM MATRÍCULA';
-
-  const enrollmentStart = activeEnrollment?.startDate ?? null;
-  const enrollmentEnd = activeEnrollment?.endDate ?? null;
-
-  const paymentsWithinEnrollment = payments.filter(
-    (p) =>
-      (!enrollmentStart || p.dueDate >= enrollmentStart) &&
-      (!enrollmentEnd || p.dueDate <= enrollmentEnd),
+  const daMatricula = payments.filter((p) =>
+    p.enrollmentId
+      ? p.enrollmentId === enrollment.id
+      : p.dueDate >= enrollment.startDate && p.dueDate <= enrollment.endDate,
   );
 
-  const hasOverduePayment = paymentsWithinEnrollment.some(
+  const hasOverduePayment = daMatricula.some(
     (p) => p.status === 'PENDING' && p.dueDate < now,
   );
 
-  const hasUpcomingPayment = paymentsWithinEnrollment.some((p) => {
+  const hasUpcomingPayment = daMatricula.some((p) => {
     const diffDays = Math.floor(
       (p.dueDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
     );
@@ -42,13 +47,34 @@ export function deriveStudentStatus(
   if (hasOverduePayment) return 'ATRASADO';
   if (hasUpcomingPayment) return 'PENDENTE';
 
-  if (enrollmentEnd) {
-    const diffDays = Math.ceil(
-      (enrollmentEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
-    );
-    if (diffDays < 0) return 'ATRASADO';
-    if (diffDays <= 3) return 'PENDENTE';
-  }
+  const diffDays = Math.ceil(
+    (enrollment.endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+  );
+  if (diffDays < 0) return 'ATRASADO';
+  if (diffDays <= 3) return 'PENDENTE';
 
   return 'EM DIA';
+}
+
+/**
+ * Status do aluno: o pior entre as matrículas ativas dele. Quem está em dia
+ * no muay thai e atrasado no boxe está atrasado — é a mesma pessoa devendo.
+ *
+ * Extraído de `students.getAll` para o detalhe do aluno e o painel usarem
+ * exatamente a mesma regra — duas implementações divergiriam com o tempo.
+ */
+export function deriveStudentStatus(
+  payments: Array<PaymentLike>,
+  activeEnrollments: Array<EnrollmentLike>,
+  now: Date = new Date(),
+): StudentStatus {
+  /* Matrícula cancelada não é aluno em dia: sem contrato em vigor não há o
+     que estar em dia com. */
+  if (activeEnrollments.length === 0) return 'SEM MATRÍCULA';
+
+  return activeEnrollments
+    .map((enrollment) => statusDaMatricula(payments, enrollment, now))
+    .reduce((pior, atual) =>
+      GRAVIDADE[atual] > GRAVIDADE[pior] ? atual : pior,
+    );
 }

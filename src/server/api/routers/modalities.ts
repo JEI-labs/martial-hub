@@ -181,16 +181,24 @@ export const modalitiesRouter = createTRPCRouter({
       }
 
       /* Modalidade em uso só pode ser desativada: apagar levaria junto as
-         faixas, e com elas a graduação dos alunos. A matrícula (#35) entra
-         nesta mesma trava quando apontar para modalidade. */
-      const alunosComFaixa = await ctx.prisma.student.count({
-        where: { tenantId, graduation: { modalityId: alvo.id } },
-      });
+         faixas (e com elas a graduação dos alunos) e o histórico de
+         matrícula de quem a fez — inclusive de quem já saiu. */
+      const [alunosComFaixa, matriculas] = await Promise.all([
+        ctx.prisma.student.count({
+          where: { tenantId, graduation: { modalityId: alvo.id } },
+        }),
+        ctx.prisma.enrollment.count({ where: { modalityId: alvo.id } }),
+      ]);
 
-      if (alunosComFaixa > 0) {
+      if (alunosComFaixa > 0 || matriculas > 0) {
+        const motivo =
+          matriculas > 0
+            ? `${matriculas} ${matriculas === 1 ? 'matrícula' : 'matrículas'} em ${alvo.name}, contando as encerradas`
+            : `${alunosComFaixa} ${alunosComFaixa === 1 ? 'aluno com faixa' : 'alunos com faixa'} de ${alvo.name}`;
+
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: `${alunosComFaixa} ${alunosComFaixa === 1 ? 'aluno tem' : 'alunos têm'} faixa de ${alvo.name}. Desative a modalidade em vez de apagar.`,
+          message: `Há ${motivo}. Desative a modalidade em vez de apagar.`,
         });
       }
 

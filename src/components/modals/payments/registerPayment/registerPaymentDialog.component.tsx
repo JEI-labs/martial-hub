@@ -73,7 +73,7 @@ export function RegisterPaymentDialog({
   const { toast } = useToast();
   const utils = api.useUtils();
 
-  const [selectedDueDate, setSelectedDueDate] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [promotionId, setPromotionId] = useState<string>(NO_PROMOTION);
 
   const { data, isLoading } = api.payment.getPaymentsByStudent.useQuery(
@@ -97,14 +97,16 @@ export function RegisterPaymentDialog({
 
   // troca de aluno ou reabertura: volta para a parcela mais antiga
   useResetOnChange([studentId, open], () => {
-    setSelectedDueDate(null);
+    setSelectedId(null);
     setPromotionId(NO_PROMOTION);
   });
 
+  /* Pelo id: com uma matrícula por modalidade, duas parcelas do mesmo aluno
+     podem vencer no mesmo dia. */
   const selected =
-    pending.find(
-      (payment) => new Date(payment.dueDate).toISOString() === selectedDueDate,
-    ) ?? pending[0];
+    pending.find((payment) => payment.id === selectedId) ?? pending[0];
+  const variasModalidades =
+    new Set(pending.map((payment) => payment.enrollment?.modality.id)).size > 1;
 
   const promotion = promotions?.data.find((item) => item.id === promotionId);
 
@@ -167,7 +169,6 @@ export function RegisterPaymentDialog({
             <div className="flex max-h-56 flex-col gap-2 overflow-y-auto p-0.5">
               {pending.map((payment) => {
                 const dueDate = new Date(payment.dueDate);
-                const key = dueDate.toISOString();
                 const isSelected = selected?.id === payment.id;
                 const due = describeDueDate(dueDate);
 
@@ -175,7 +176,7 @@ export function RegisterPaymentDialog({
                   <button
                     key={payment.id}
                     type="button"
-                    onClick={() => setSelectedDueDate(key)}
+                    onClick={() => setSelectedId(payment.id)}
                     className={cn(
                       'focus-visible:ring-primary flex items-center justify-between gap-3 rounded-xl p-3 text-left transition-colors outline-none focus-visible:ring-2',
                       isSelected
@@ -188,6 +189,12 @@ export function RegisterPaymentDialog({
                         {format(dueDate, "dd 'de' MMMM 'de' yyyy", {
                           locale: ptBR,
                         })}
+                        {variasModalidades && payment.enrollment && (
+                          <span className="text-muted-foreground font-normal">
+                            {' · '}
+                            {payment.enrollment.modality.name}
+                          </span>
+                        )}
                       </p>
                       <p
                         className={cn(
@@ -255,8 +262,7 @@ export function RegisterPaymentDialog({
             onClick={() =>
               selected &&
               register.mutate({
-                studentId,
-                dueDate: new Date(selected.dueDate).toISOString(),
+                paymentId: selected.id,
                 promotionId: promotionId === NO_PROMOTION ? null : promotionId,
               })
             }

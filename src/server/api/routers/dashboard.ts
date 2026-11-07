@@ -132,7 +132,10 @@ export const dashboardRouter = createTRPCRouter({
               where: { tenantId },
               include: {
                 enrollments: {
-                  include: { plan: true },
+                  include: {
+                    plan: true,
+                    modality: { select: { name: true } },
+                  },
                   orderBy: { startDate: 'desc' },
                 },
                 payments: { orderBy: { dueDate: 'asc' } },
@@ -183,10 +186,10 @@ export const dashboardRouter = createTRPCRouter({
 
         type StudentRecord = (typeof students)[number];
 
-        /** Vigente = marcada como ativa e ainda dentro do prazo. */
-        const currentEnrollment = (student: StudentRecord) =>
-          student.enrollments.find((e) => e.isActive && e.endDate >= now) ??
-          null;
+        /** Vigente = marcada como ativa e ainda dentro do prazo. Uma por
+            modalidade: quem faz muay thai e boxe tem duas. */
+        const currentEnrollments = (student: StudentRecord) =>
+          student.enrollments.filter((e) => e.isActive && e.endDate >= now);
 
         const byStatus: Record<StudentStatus, number> = {
           'EM DIA': 0,
@@ -213,7 +216,7 @@ export const dashboardRouter = createTRPCRouter({
         let activeStudents = 0;
 
         for (const student of students) {
-          const enrollment = currentEnrollment(student);
+          const vigentes = currentEnrollments(student);
 
           const faixa = student.graduation;
           const graduationKey = faixa?.id ?? 'SEM_GRADUACAO';
@@ -230,27 +233,33 @@ export const dashboardRouter = createTRPCRouter({
           bar.students += 1;
           byGraduation.set(graduationKey, bar);
 
-          if (!enrollment?.plan) continue;
+          if (vigentes.length === 0) continue;
 
+          /* Aluno ativo conta uma vez; o MRR soma todas as matrículas dele —
+             cada modalidade paga o seu plano. Em "MRR por plano", cada
+             matrícula conta no plano dela. */
           activeStudents += 1;
-          const monthly = monthlyValue(
-            enrollment.plan.price,
-            enrollment.plan.duration,
-          );
-          mrr += monthly;
 
-          const plan = byPlan.get(enrollment.plan.name) ?? {
-            students: 0,
-            mrr: 0,
-          };
-          plan.students += 1;
-          plan.mrr += monthly;
-          byPlan.set(enrollment.plan.name, plan);
+          for (const enrollment of vigentes) {
+            const monthly = monthlyValue(
+              enrollment.plan.price,
+              enrollment.plan.duration,
+            );
+            mrr += monthly;
+
+            const plan = byPlan.get(enrollment.plan.name) ?? {
+              students: 0,
+              mrr: 0,
+            };
+            plan.students += 1;
+            plan.mrr += monthly;
+            byPlan.set(enrollment.plan.name, plan);
+          }
 
           byStatus[
             deriveStudentStatus(
               student.payments,
-              student.enrollments.find((e) => e.isActive) ?? null,
+              student.enrollments.filter((e) => e.isActive),
               now,
             )
           ] += 1;
@@ -265,14 +274,14 @@ export const dashboardRouter = createTRPCRouter({
             s.createdAt <= previousMonthEnd,
         ).length;
 
-        /* Saída = matrícula que venceu no mês sem nenhuma outra começar
-           depois dela para o mesmo aluno. */
+        /* Saída = aluno com matrícula que venceu no mês e nenhuma outra
+           vigente. Parar o boxe e seguir no muay thai não é saída. */
         const churnedThisMonth = students.filter((student) => {
           const endedNow = student.enrollments.some(
             (e) => e.endDate >= monthStart && e.endDate <= monthEnd,
           );
           if (!endedNow) return false;
-          return !currentEnrollment(student);
+          return currentEnrollments(student).length === 0;
         }).length;
 
         const activeAtMonthStart = students.filter((student) =>
@@ -423,16 +432,27 @@ export const dashboardRouter = createTRPCRouter({
         const buckets = periodBuckets(seriesStart, rangeEnd);
 
         const series = buckets.map((bucket) => {
-          /* MRR do período = matrículas que estavam vigentes no fim dele. */
+          /* MRR do período = matrículas que estavam vigentes no fim dele, uma
+             por modalidade do aluno (a mais recente, se a troca de plano
+             cair bem no limite e as duas se encostarem). */
           const monthlyRecurring = students.reduce((total, student) => {
-            const enrollment = student.enrollments.find(
-              (e) => e.startDate <= bucket.end && e.endDate >= bucket.end,
-            );
+            const porModalidade = new Map<
+              string,
+              StudentRecord['enrollments'][number]
+            >();
+            for (const e of student.enrollments) {
+              if (e.startDate > bucket.end || e.endDate < bucket.end) continue;
+              const atual = porModalidade.get(e.modalityId);
+              if (!atual || e.startDate > atual.startDate) {
+                porModalidade.set(e.modalityId, e);
+              }
+            }
             return (
               total +
-              (enrollment?.plan
-                ? monthlyValue(enrollment.plan.price, enrollment.plan.duration)
-                : 0)
+              Array.from(porModalidade.values()).reduce(
+                (soma, e) => soma + monthlyValue(e.plan.price, e.plan.duration),
+                0,
+              )
             );
           }, 0);
 
@@ -512,6 +532,7 @@ export const dashboardRouter = createTRPCRouter({
                 id: e.id,
                 studentId: student.id,
                 studentName: student.name,
+                modalityName: e.modality.name,
                 planName: e.plan?.name ?? 'Sem plano',
                 endDate: e.endDate,
                 daysLeft: differenceInCalendarDays(e.endDate, now),

@@ -1,13 +1,20 @@
 import type { GraduationView } from '@/components/graduationBadge/graduationBadge.component';
 
+export interface ActiveEnrollmentRow {
+  id: string;
+  modality: { id: string; name: string };
+  planId: string;
+  planName: string;
+}
+
 export interface StudentRow {
   id: string;
   name: string;
   avatar?: string | null;
   email: string;
   status: string;
-  planName: string;
-  planId?: string | null;
+  /** Uma por modalidade que o aluno faz hoje, na ordem da academia. */
+  activeEnrollments: Array<ActiveEnrollmentRow>;
   graduation?: GraduationView | null;
   createdAt: Date;
 }
