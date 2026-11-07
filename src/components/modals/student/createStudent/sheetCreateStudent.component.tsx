@@ -39,6 +39,7 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
   const { toast } = useToast();
 
   const plansApi = api.plans.getAll.useQuery({ page: 1, limit: 100 });
+  const { data: pricing } = api.plans.getPricingSettings.useQuery();
   const { data: plansData } = plansApi;
   const defaultPlanId = plansData?.data.find((plan) => plan.isDefault)?.id;
 
@@ -219,6 +220,7 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
               price: Number(plan.price),
             }))}
             defaultPlanId={defaultPlanId}
+            desconto={pricing?.multiModalityDiscount ?? 0}
             open={isOpen}
             error={enrollmentsError}
           />

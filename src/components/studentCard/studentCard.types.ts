@@ -5,6 +5,7 @@ export interface ActiveEnrollmentRow {
   modality: { id: string; name: string };
   planId: string;
   planName: string;
+  discountPercent: number;
 }
 
 export interface StudentRow {

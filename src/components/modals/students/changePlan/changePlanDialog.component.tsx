@@ -27,13 +27,20 @@ import { useToast } from '@/hooks/use-toast';
 import { api } from '@/trpc/react';
 import { maskBRL } from '@/utils/masksUtils';
 import { installmentCount, splitIntoInstallments } from '@/utils/planUtils';
+import {
+  comDesconto,
+  descontosDasMatriculas,
+  precoNaModalidade,
+} from '@/common/utils/pricing';
 
 /** A matrícula cujo plano vai trocar. */
 export interface EnrollmentToChange {
   id: string;
   planId: string;
   planName: string;
-  modality: { name: string };
+  modality: { id: string; name: string };
+  /** Se a matrícula é a que tem desconto de 2ª modalidade. */
+  discountPercent: number;
 }
 
 interface ChangePlanDialogProps {
@@ -108,9 +115,32 @@ export function ChangePlanDialog({
   );
   const selected = options.find((plan) => plan.id === planId);
 
+  const { data: pricing } = api.plans.getPricingSettings.useQuery(undefined, {
+    enabled: open,
+  });
+  const descontoDaAcademia = pricing?.multiModalityDiscount ?? 0;
+
+  /* A mesma conta do servidor. Na troca, a matrícula mantém o desconto se
+     já tinha; matrícula nova ganha desconto se o aluno já faz outra. */
+  const modalidadeDoPreco = enrollment?.modality.id ?? modalidadeEscolhida?.id;
+  const precoCheio =
+    selected && modalidadeDoPreco
+      ? precoNaModalidade(selected, modalidadeDoPreco)
+      : Number(selected?.price ?? 0);
+  const percent = enrollment
+    ? enrollment.discountPercent > 0
+      ? descontoDaAcademia
+      : 0
+    : (descontosDasMatriculas(
+        [precoCheio],
+        enrolledModalityIds.length,
+        descontoDaAcademia,
+      )[0] ?? 0);
+  const valor = comDesconto(precoCheio, percent);
+
   const amounts = selected
     ? splitIntoInstallments(
-        Number(selected.price),
+        valor,
         installmentCount(selected.duration, selected.billing),
       )
     : [];
@@ -225,9 +255,15 @@ export function ChangePlanDialog({
                 <SelectContent>
                   {options.map((plan) => (
                     <SelectItem key={plan.id} value={plan.id}>
-                      {plan.name} · {maskBRL(Number(plan.price), true)} ·{' '}
-                      {plan.duration} {plan.duration === 1 ? 'mês' : 'meses'} ·{' '}
-                      {PLAN_BILLING_LABEL[plan.billing]}
+                      {plan.name} ·{' '}
+                      {maskBRL(
+                        modalidadeDoPreco
+                          ? precoNaModalidade(plan, modalidadeDoPreco)
+                          : Number(plan.price),
+                        true,
+                      )}{' '}
+                      · {plan.duration} {plan.duration === 1 ? 'mês' : 'meses'}{' '}
+                      · {PLAN_BILLING_LABEL[plan.billing]}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -258,6 +294,13 @@ export function ChangePlanDialog({
                       outras modalidades do aluno não mudam.
                     </li>
                   </>
+                )}
+                {percent > 0 && (
+                  <li>
+                    {percent}% de desconto de 2ª modalidade:{' '}
+                    {maskBRL(valor, true)} em vez de {maskBRL(precoCheio, true)}
+                    .
+                  </li>
                 )}
                 <li>
                   {amounts.length === 1

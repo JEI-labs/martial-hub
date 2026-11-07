@@ -112,6 +112,7 @@ export default function StudentDetailPage({
       planId: enrollment.planId,
       planName: enrollment.plan.name,
       modality: enrollment.modality,
+      discountPercent: enrollment.discountPercent,
     });
     setChangePlanOpen(true);
   };
@@ -469,9 +470,9 @@ export default function StudentDetailPage({
                     <p className="text-muted-foreground text-sm">
                       {formatDate(enrollment.startDate)} a{' '}
                       {formatDate(enrollment.endDate)}
-                      {enrollment.plan
-                        ? ` · ${formatMoney(Number(enrollment.plan.price))}`
-                        : ''}
+                      {` · ${formatMoney(enrollment.price)}`}
+                      {enrollment.discountPercent > 0 &&
+                        ` (${enrollment.discountPercent}% de desconto)`}
                     </p>
                   </div>
                 ))}
@@ -504,10 +505,15 @@ export default function StudentDetailPage({
                       <TableCell className="text-muted-foreground">
                         {formatDate(enrollment.endDate)}
                       </TableCell>
-                      <TableCell className="text-right">
-                        {enrollment.plan
-                          ? formatMoney(Number(enrollment.plan.price))
-                          : '—'}
+                      {/* O valor da matrícula, não o preço de hoje do
+                          plano: é o que foi combinado, com o desconto. */}
+                      <TableCell className="text-right whitespace-nowrap">
+                        {formatMoney(enrollment.price)}
+                        {enrollment.discountPercent > 0 && (
+                          <span className="text-muted-foreground block text-xs">
+                            {enrollment.discountPercent}% de desconto
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge

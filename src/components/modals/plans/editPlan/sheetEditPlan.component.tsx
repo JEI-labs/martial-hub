@@ -19,6 +19,7 @@ import {
 import { maskDecimalWithAcronym, unmaskDecimal } from '@/utils/masksUtils';
 import { maskOnlyNumbersV2 } from '@/common/utils/mask';
 import { EPlanBilling } from '@prisma/client';
+import { ModalityPricesField } from '@/components/modals/plans/modalityPricesField.component';
 
 export const SheetEditPlan: React.FC<ISheetEditPlan> = ({
   isOpen,
@@ -163,6 +164,12 @@ export const SheetEditPlan: React.FC<ISheetEditPlan> = ({
               name="isDefault"
               title="Plano padrão"
               bottomDescription="Vem escolhido sozinho ao matricular um aluno. Só um plano pode ser o padrão: marcar este tira o anterior."
+            />
+
+            <ModalityPricesField
+              setValue={form.setValue}
+              open={isOpen}
+              existentes={planQuery.data?.data.modalityPrices}
             />
           </div>
         </div>

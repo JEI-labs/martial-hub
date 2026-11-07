@@ -9,6 +9,12 @@ export interface PlanItem {
   billing: EPlanBilling;
   isDefault: boolean;
   createdAt: string | Date;
+  /** Valores próprios por modalidade; as outras usam `price`. */
+  modalityPrices?: Array<{
+    modalityId: string;
+    price: number;
+    modality: { name: string };
+  }>;
 }
 
 export interface IPlanList {

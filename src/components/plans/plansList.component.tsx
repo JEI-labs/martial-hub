@@ -104,6 +104,17 @@ const PlansList: React.FC<IPlanList> = ({ plans, isLoading, onEdit }) => {
                           /mês
                         </span>
                       )}
+                      {/* Os valores próprios de cada modalidade, quando
+                          houver; as outras usam o preço de cima. */}
+                      {plan.modalityPrices?.map((item) => (
+                        <span
+                          key={item.modalityId}
+                          className="text-muted-foreground block text-xs"
+                        >
+                          {item.modality.name}:{' '}
+                          {maskBRL(Number(item.price), true)}
+                        </span>
+                      ))}
                     </TableCell>
 
                     <TableCell className="text-muted-foreground">

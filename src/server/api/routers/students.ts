@@ -19,8 +19,13 @@ import { Prisma } from '@prisma/client';
 import { getAllStudentInputSchema } from '@/server/validations/pagination';
 import { conferirGraduacao, graduationSelect } from '@/server/graduations';
 import {
+  descontosDasMatriculas,
+  precoNaModalidade,
+} from '@/common/utils/pricing';
+import {
   categoriaDeAlunos,
   conferirModalidadeEPlano,
+  descontoDaAcademia,
   encerrarMatricula,
   enrollmentInclude,
   matricular,
@@ -65,6 +70,16 @@ export const studentRouter = createTRPCRouter({
       );
       const category = await categoriaDeAlunos(ctx.prisma, tenantId);
 
+      /* Desconto da 2ª modalidade em diante: aluno novo paga cheio na mais
+         cara e ganha desconto nas outras. */
+      const descontos = descontosDasMatriculas(
+        pedidas.map(({ modality, plan }) =>
+          precoNaModalidade(plan, modality.id),
+        ),
+        0,
+        await descontoDaAcademia(ctx.prisma, tenantId),
+      );
+
       try {
         const createdStudent = await ctx.prisma.$transaction(async (tx) => {
           const student = await tx.student.create({
@@ -82,7 +97,7 @@ export const studentRouter = createTRPCRouter({
 
           /* 3) Uma matrícula por modalidade, cada uma com o seu plano e as
                 suas parcelas. */
-          for (const { modality, plan } of pedidas) {
+          for (const [index, { modality, plan }] of pedidas.entries()) {
             await matricular(tx, {
               student,
               modality,
@@ -91,6 +106,7 @@ export const studentRouter = createTRPCRouter({
               userId,
               tenantId,
               categoryId: category.id,
+              discountPercent: descontos[index] ?? 0,
             });
           }
 
@@ -157,6 +173,16 @@ export const studentRouter = createTRPCRouter({
           });
         }
 
+        /* Quem já faz outra modalidade ganha o desconto nesta. */
+        const ativas = await tx.enrollment.count({
+          where: { studentId: student.id, isActive: true },
+        });
+        const [discountPercent = 0] = descontosDasMatriculas(
+          [precoNaModalidade(plan, modality.id)],
+          ativas,
+          await descontoDaAcademia(tx, tenantId),
+        );
+
         const { enrollment, installments } = await matricular(tx, {
           student,
           modality,
@@ -165,6 +191,7 @@ export const studentRouter = createTRPCRouter({
           userId,
           tenantId,
           categoryId: category.id,
+          discountPercent,
         });
 
         return { ok: true, enrollmentId: enrollment.id, installments };
@@ -384,6 +411,8 @@ export const studentRouter = createTRPCRouter({
               modality: e.modality,
               planId: e.planId,
               planName: e.plan.name,
+              price: e.price,
+              discountPercent: e.discountPercent,
               endDate: e.endDate,
             })),
           };
@@ -576,6 +605,7 @@ export const studentRouter = createTRPCRouter({
 
       const plan = await ctx.prisma.plan.findFirst({
         where: { id: input.planId, tenantId },
+        include: { modalityPrices: true },
       });
       if (!plan) {
         throw new TRPCError({
@@ -586,6 +616,15 @@ export const studentRouter = createTRPCRouter({
 
       const category = await categoriaDeAlunos(ctx.prisma, tenantId);
       const startDate = new Date();
+
+      /* A troca continua o contrato daquela modalidade: se ela era a que
+         tinha desconto de 2ª modalidade, a nova também tem, no desconto de
+         hoje da academia. Recalcular pelas outras ativas daria desconto às
+         duas quando o aluno troca o plano da que paga cheio. */
+      const discountPercent =
+        current.discountPercent > 0
+          ? await descontoDaAcademia(ctx.prisma, tenantId)
+          : 0;
 
       try {
         const result = await ctx.prisma.$transaction(async (tx) => {
@@ -602,6 +641,7 @@ export const studentRouter = createTRPCRouter({
             tenantId,
             categoryId: category.id,
             motivo: 'na troca de plano',
+            discountPercent,
           });
 
           return { cancelled, installments };

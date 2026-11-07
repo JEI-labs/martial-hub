@@ -20,6 +20,7 @@ import {
 } from '@/server/validations/plans';
 import { maskOnlyNumbersV2 } from '@/common/utils/mask';
 import { EPlanBilling } from '@prisma/client';
+import { ModalityPricesField } from '@/components/modals/plans/modalityPricesField.component';
 
 export const SheetCreatePlan: React.FC<ICreateSheetPlan> = ({
   isOpen,
@@ -124,6 +125,8 @@ export const SheetCreatePlan: React.FC<ICreateSheetPlan> = ({
           title="Plano padrão"
           bottomDescription="Vem escolhido sozinho ao matricular um aluno. Só um plano pode ser o padrão: marcar este tira o anterior."
         />
+
+        <ModalityPricesField setValue={form.setValue} open={isOpen} />
       </FormModal>
     </Form>
   );

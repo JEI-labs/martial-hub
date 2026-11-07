@@ -3,10 +3,65 @@ import {
   protectedProcedure,
   ownerProcedure,
 } from '@/server/api/trpc';
-import { createPlanSchema, updatePlanSchema } from '@/server/validations/plans';
+import {
+  createPlanSchema,
+  pricingSettingsSchema,
+  updatePlanSchema,
+  type IModalityPriceInput,
+} from '@/server/validations/plans';
 import { Prisma } from '@prisma/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
+
+/** Valor de modalidade para mostrar e editar o plano. */
+const modalityPricesInclude = {
+  modalityPrices: {
+    select: {
+      modalityId: true,
+      price: true,
+      modality: { select: { name: true } },
+    },
+  },
+} satisfies Prisma.PlanInclude;
+
+/**
+ * Regrava os valores por modalidade do plano: os que vieram com valor ficam,
+ * o resto volta ao preço padrão. Confere que as modalidades são desta
+ * academia — o id chega do navegador.
+ */
+async function gravarPrecosPorModalidade(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  planId: string,
+  lista: Array<IModalityPriceInput>,
+) {
+  const comValor = lista
+    .map((item) => ({
+      modalityId: item.modalityId,
+      price: parseFloat(item.price || '0') / 100,
+    }))
+    .filter((item) => item.price > 0);
+
+  if (comValor.length > 0) {
+    const daAcademia = await tx.modality.count({
+      where: {
+        tenantId,
+        id: { in: comValor.map((item) => item.modalityId) },
+      },
+    });
+    if (daAcademia !== new Set(comValor.map((i) => i.modalityId)).size) {
+      throw new TRPCError({
+        code: 'BAD_REQUEST',
+        message: 'Modalidade não encontrada nesta academia.',
+      });
+    }
+  }
+
+  await tx.planModalityPrice.deleteMany({ where: { planId } });
+  await tx.planModalityPrice.createMany({
+    data: comValor.map((item) => ({ ...item, planId })),
+  });
+}
 
 export const plansRouter = createTRPCRouter({
   create: ownerProcedure
@@ -42,7 +97,7 @@ export const plansRouter = createTRPCRouter({
           });
         }
 
-        return tx.plan.create({
+        const plan = await tx.plan.create({
           data: {
             name: input.name,
             description: input.description,
@@ -54,6 +109,15 @@ export const plansRouter = createTRPCRouter({
             tenantId,
           },
         });
+
+        await gravarPrecosPorModalidade(
+          tx,
+          tenantId,
+          plan.id,
+          input.modalityPrices ?? [],
+        );
+
+        return plan;
       });
 
       return {
@@ -100,6 +164,7 @@ export const plansRouter = createTRPCRouter({
           skip: (input.page - 1) * input.limit,
           take: input.limit,
           orderBy: { createdAt: 'desc' },
+          include: modalityPricesInclude,
         }),
         ctx.prisma.plan.count({ where }),
       ]);
@@ -134,6 +199,19 @@ export const plansRouter = createTRPCRouter({
         });
       }
 
+      /* A matrícula aponta para o plano em cascata: apagar um plano em uso
+         apagava junto as matrículas de quem está nele, ativas e encerradas. */
+      const emUso = await ctx.prisma.enrollment.count({
+        where: { planId: input.id, plan: { tenantId } },
+      });
+
+      if (emUso > 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `Este plano está em ${emUso} ${emUso === 1 ? 'matrícula' : 'matrículas'}, contando as encerradas, e não pode ser apagado.`,
+        });
+      }
+
       await ctx.prisma.plan.delete({
         where: { id: input.id, tenantId },
       });
@@ -154,7 +232,7 @@ export const plansRouter = createTRPCRouter({
         });
       }
 
-      const { id, duration, price, ...rest } = input;
+      const { id, duration, price, modalityPrices, ...rest } = input;
 
       const updatedPlan = await ctx.prisma.$transaction(async (tx) => {
         if (rest.isDefault) {
@@ -164,7 +242,9 @@ export const plansRouter = createTRPCRouter({
           });
         }
 
-        return tx.plan.update({
+        /* Muda o preço das matrículas novas. As que já existem guardam o
+           valor delas, e as parcelas já geradas não mudam. */
+        const plan = await tx.plan.update({
           where: { id, tenantId },
           data: {
             ...rest,
@@ -172,6 +252,17 @@ export const plansRouter = createTRPCRouter({
             duration: Number(duration),
           },
         });
+
+        if (modalityPrices) {
+          await gravarPrecosPorModalidade(
+            tx,
+            tenantId,
+            plan.id,
+            modalityPrices,
+          );
+        }
+
+        return plan;
       });
 
       return {
@@ -195,6 +286,7 @@ export const plansRouter = createTRPCRouter({
 
       const plan = await ctx.prisma.plan.findFirst({
         where: { id: input.id, tenantId },
+        include: modalityPricesInclude,
       });
 
       if (!plan) {
@@ -205,5 +297,28 @@ export const plansRouter = createTRPCRouter({
       }
 
       return { data: plan };
+    }),
+
+  /** O desconto da academia da 2ª modalidade em diante. */
+  getPricingSettings: protectedProcedure.query(async ({ ctx }) => {
+    const tenant = await ctx.prisma.tenant.findUnique({
+      where: { id: ctx.tenantId },
+      select: { multiModalityDiscount: true },
+    });
+    return { multiModalityDiscount: tenant?.multiModalityDiscount ?? 0 };
+  }),
+
+  /**
+   * Vale para as matrículas feitas daqui em diante. As que já existem
+   * guardam o valor delas — mudar o desconto não reescreve contrato.
+   */
+  updatePricingSettings: ownerProcedure
+    .input(pricingSettingsSchema)
+    .mutation(async ({ ctx, input }) => {
+      await ctx.prisma.tenant.update({
+        where: { id: ctx.tenantId },
+        data: { multiModalityDiscount: input.multiModalityDiscount },
+      });
+      return { ok: true };
     }),
 });

@@ -5,6 +5,7 @@ import {
   EPlanBilling,
   PaymentStatus,
   type Plan,
+  type PlanModalityPrice,
   type Prisma,
   type PrismaClient,
 } from '@prisma/client';
@@ -12,6 +13,7 @@ import { TRPCError } from '@trpc/server';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+import { comDesconto, precoNaModalidade } from '@/common/utils/pricing';
 import { installmentCount, splitIntoInstallments } from '@/utils/planUtils';
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -37,7 +39,10 @@ export async function conferirModalidadeEPlano(
       where: { id: modalityId, tenantId },
       select: { id: true, name: true, isActive: true },
     }),
-    db.plan.findFirst({ where: { id: planId, tenantId } }),
+    db.plan.findFirst({
+      where: { id: planId, tenantId },
+      include: { modalityPrices: true },
+    }),
   ]);
 
   if (!modality) {
@@ -62,6 +67,15 @@ export async function conferirModalidadeEPlano(
   }
 
   return { modality, plan };
+}
+
+/** O desconto da academia da 2ª modalidade em diante, em %. */
+export async function descontoDaAcademia(db: Db, tenantId: string) {
+  const tenant = await db.tenant.findUnique({
+    where: { id: tenantId },
+    select: { multiModalityDiscount: true },
+  });
+  return tenant?.multiModalityDiscount ?? 0;
 }
 
 /** A categoria fixa que recebe as mensalidades. Sem ela não há matrícula. */
@@ -94,8 +108,9 @@ export async function categoriaDeAlunos(db: Db, tenantId: string) {
  * trimestre adiantado não tem mensalidade vencendo no meio dele, e a próxima
  * cobrança é a renovação.
  *
- * Cada matrícula paga o seu plano: quem faz duas modalidades paga as duas.
- * Preço combinado por modalidade é a #36.
+ * O valor é o do plano nesta modalidade (o próprio dela, ou o padrão do
+ * plano), menos o desconto — e fica guardado na matrícula: mudar o preço do
+ * plano depois não reescreve este contrato.
  */
 export async function matricular(
   tx: Prisma.TransactionClient,
@@ -108,11 +123,14 @@ export async function matricular(
     tenantId,
     categoryId,
     motivo,
+    discountPercent,
   }: {
     student: { id: string; name: string };
     modality: { id: string; name: string };
-    plan: Plan;
+    plan: Plan & { modalityPrices: Array<PlanModalityPrice> };
     startDate: Date;
+    /** Desconto da 2ª modalidade em diante, em %. 0 é valor cheio. */
+    discountPercent: number;
     userId: string;
     tenantId: string;
     categoryId: string;
@@ -120,11 +138,18 @@ export async function matricular(
     motivo?: string;
   },
 ) {
+  const price = comDesconto(
+    precoNaModalidade(plan, modality.id),
+    discountPercent,
+  );
+
   const enrollment = await tx.enrollment.create({
     data: {
       studentId: student.id,
       modalityId: modality.id,
       planId: plan.id,
+      price,
+      discountPercent,
       startDate,
       endDate: new Date(
         new Date(startDate).setMonth(startDate.getMonth() + plan.duration),
@@ -133,7 +158,7 @@ export async function matricular(
   });
 
   const amounts = splitIntoInstallments(
-    plan.price,
+    price,
     installmentCount(plan.duration, plan.billing),
   );
 
@@ -153,6 +178,9 @@ export async function matricular(
 
   const mes = format(startDate, 'MMMM/yyyy', { locale: ptBR });
   const quando = motivo ? ` ${motivo}` : '';
+  const desconto = discountPercent
+    ? ` com ${discountPercent}% de desconto de 2ª modalidade`
+    : '';
   const isUpfront = plan.billing === EPlanBilling.UPFRONT;
 
   await tx.financeEntry.create({
@@ -161,8 +189,8 @@ export async function matricular(
       date: startDate,
       type: EFinanceEntryType.STUDENTS,
       description: isUpfront
-        ? `${plan.name} de ${modality.name} de ${student.name} pago à vista${quando} (${plan.duration} ${plan.duration === 1 ? 'mês' : 'meses'} a partir de ${mes}).`
-        : `Parcela 1 de ${student.name} em ${modality.name}, plano ${plan.name}${quando}, com vencimento em ${mes}.`,
+        ? `${plan.name} de ${modality.name} de ${student.name} pago à vista${quando}${desconto} (${plan.duration} ${plan.duration === 1 ? 'mês' : 'meses'} a partir de ${mes}).`
+        : `Parcela 1 de ${student.name} em ${modality.name}, plano ${plan.name}${quando}${desconto}, com vencimento em ${mes}.`,
       status: EFinanceEntryStatus.PAID,
       currency: 'BRL',
       paymentMethod: EPaymentMethod.CREDIT_CARD,
