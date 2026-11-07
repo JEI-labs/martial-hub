@@ -4,6 +4,8 @@ import { z } from 'zod';
 export const enrollmentRequestSchema = z.object({
   modalityId: z.string().uuid('Escolha a modalidade'),
   planId: z.string().uuid('Selecione um plano'),
+  /** Faixa com que o aluno já chega nesta modalidade. Opcional. */
+  graduationId: z.string().uuid().nullable().optional(),
 });
 
 export type IEnrollmentRequest = z.infer<typeof enrollmentRequestSchema>;
@@ -14,10 +16,6 @@ const studentDataSchema = z.object({
   email: z.string().email('Por favor, insira um endereço de email válido.'),
   phone: z.string().min(10, 'Por favor, insira um telefone válido'),
   avatarUrl: z.string().nullable(),
-  /* Opcional: nem todo aluno novo já tem graduação definida. Ausente quer
-     dizer "não mexer" — a edição do aluno não manda este campo, e tratá-lo
-     como nulo apagava a faixa de quem era editado. */
-  graduationId: z.string().uuid().nullable().optional(),
   birthDate: z.string().superRefine((val, ctx) => {
     if (!val || val.trim() === '') {
       ctx.addIssue({
@@ -91,6 +89,20 @@ export const defaultCreateStudentValues = {
   phone: '',
   avatarUrl: '',
   enrollments: [] as Array<IEnrollmentRequest>,
-  graduationId: null,
   birthDate: undefined,
 };
+
+/** Uma graduação nova: a faixa, o dia em que foi dada e uma observação. */
+export const awardGraduationSchema = z.object({
+  studentId: z.string(),
+  graduationId: z.string().uuid('Escolha a faixa'),
+  /** dd/mm/aaaa; vazio é hoje. */
+  awardedAt: z
+    .string()
+    .regex(/^\d{2}\/\d{2}\/\d{4}$/, 'Use DD/MM/AAAA')
+    .optional()
+    .or(z.literal('')),
+  note: z.string().trim().max(120, 'Observação muito longa').optional(),
+});
+
+export type IAwardGraduation = z.infer<typeof awardGraduationSchema>;

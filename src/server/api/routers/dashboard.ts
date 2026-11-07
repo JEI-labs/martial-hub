@@ -2,6 +2,7 @@
 import { createTRPCRouter, protectedProcedure } from '@/server/api/trpc';
 import { deriveStudentStatus } from '@/server/utils/studentStatus';
 import { monthlyValue } from '@/utils/planUtils';
+import { faixasAtuais, studentGraduationSelect } from '@/server/graduations';
 import type { StudentStatus } from '@/server/utils/studentStatus';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
@@ -126,57 +127,60 @@ export const dashboardRouter = createTRPCRouter({
         : null;
 
       try {
-        const [students, financeEntries, categories, messageLogs] =
-          await Promise.all([
-            ctx.prisma.student.findMany({
-              where: { tenantId },
-              include: {
-                enrollments: {
-                  include: {
-                    plan: true,
-                    modality: { select: { name: true } },
-                  },
-                  orderBy: { startDate: 'desc' },
+        const [
+          students,
+          financeEntries,
+          categories,
+          messageLogs,
+          modalidadesComFaixa,
+        ] = await Promise.all([
+          ctx.prisma.student.findMany({
+            where: { tenantId },
+            include: {
+              enrollments: {
+                include: {
+                  plan: true,
+                  modality: { select: { name: true } },
                 },
-                payments: { orderBy: { dueDate: 'asc' } },
-                graduation: {
-                  select: {
-                    id: true,
-                    name: true,
-                    level: true,
-                    colors: true,
-                    position: true,
-                    modality: { select: { name: true, position: true } },
-                  },
-                },
+                orderBy: { startDate: 'desc' },
               },
-            }),
-            ctx.prisma.financeEntry.findMany({
-              /* Os cards de cima falam sempre do mês corrente, mesmo com
+              payments: { orderBy: { dueDate: 'asc' } },
+              graduations: { select: studentGraduationSelect },
+            },
+          }),
+          ctx.prisma.financeEntry.findMany({
+            /* Os cards de cima falam sempre do mês corrente, mesmo com
                  o filtro num período antigo — então a busca desce até o
                  primeiro dos dois, senão "Resultado do mês" viria cortado. */
-              where: {
-                tenantId,
-                ...(fetchStart ? { date: { gte: fetchStart } } : {}),
-              },
-              select: {
-                amount: true,
-                date: true,
-                type: true,
-                status: true,
-                categoryId: true,
-                paymentMethod: true,
-              },
-            }),
-            ctx.prisma.category.findMany({
-              where: { tenantId },
-              select: { id: true, name: true },
-            }),
-            ctx.prisma.messageLog.findMany({
-              where: { tenantId, createdAt: { gte: subMonths(now, 1) } },
-              select: { status: true, event: true },
-            }),
-          ]);
+            where: {
+              tenantId,
+              ...(fetchStart ? { date: { gte: fetchStart } } : {}),
+            },
+            select: {
+              amount: true,
+              date: true,
+              type: true,
+              status: true,
+              categoryId: true,
+              paymentMethod: true,
+            },
+          }),
+          ctx.prisma.category.findMany({
+            where: { tenantId },
+            select: { id: true, name: true },
+          }),
+          ctx.prisma.messageLog.findMany({
+            where: { tenantId, createdAt: { gte: subMonths(now, 1) } },
+            select: { status: true, event: true },
+          }),
+          /* O gráfico de graduação é por modalidade, e só das que têm
+               faixa: boxe não tem o que mostrar. */
+          ctx.prisma.modality.findMany({
+            where: { tenantId, graduations: { some: {} } },
+            orderBy: [{ position: 'asc' }, { name: 'asc' }],
+            select: { id: true, name: true },
+          }),
+        ]);
 
         const categoryName = new Map(categories.map((c) => [c.id, c.name]));
 
@@ -197,19 +201,23 @@ export const dashboardRouter = createTRPCRouter({
           'ATRASADO': 0,
           'SEM MATRÍCULA': 0,
         };
-        /* Por faixa, e não por nome: "Branca" do jiu-jitsu e do karatê são
-           faixas diferentes. Quem não tem faixa cai numa barra à parte. */
+        /* Alunos por faixa, modalidade a modalidade: cada aluno conta nas
+           modalidades que faz hoje, com a faixa atual dele ali — ou na barra
+           "sem graduação" daquela modalidade. */
         type GraduationBar = {
           key: string;
           name: string | null;
           level: string | null;
           colors: Array<string>;
           position: number;
-          modality: string | null;
-          modalityPosition: number;
           students: number;
         };
-        const byGraduation = new Map<string, GraduationBar>();
+        const porModalidade = new Map(
+          modalidadesComFaixa.map((m) => [
+            m.id,
+            { bars: new Map<string, GraduationBar>(), semFaixa: 0 },
+          ]),
+        );
         const byPlan = new Map<string, { students: number; mrr: number }>();
 
         let mrr = 0;
@@ -218,20 +226,30 @@ export const dashboardRouter = createTRPCRouter({
         for (const student of students) {
           const vigentes = currentEnrollments(student);
 
-          const faixa = student.graduation;
-          const graduationKey = faixa?.id ?? 'SEM_GRADUACAO';
-          const bar = byGraduation.get(graduationKey) ?? {
-            key: graduationKey,
-            name: faixa?.name ?? null,
-            level: faixa?.level ?? null,
-            colors: faixa?.colors ?? [],
-            position: faixa?.position ?? 0,
-            modality: faixa?.modality.name ?? null,
-            modalityPosition: faixa?.modality.position ?? 0,
-            students: 0,
-          };
-          bar.students += 1;
-          byGraduation.set(graduationKey, bar);
+          const atuais = faixasAtuais(student.graduations);
+          for (const modalityId of new Set(vigentes.map((e) => e.modalityId))) {
+            const grupo = porModalidade.get(modalityId);
+            if (!grupo) continue;
+
+            const faixa = atuais.find(
+              (r) => r.graduation.modality.id === modalityId,
+            )?.graduation;
+            if (!faixa) {
+              grupo.semFaixa += 1;
+              continue;
+            }
+
+            const bar = grupo.bars.get(faixa.id) ?? {
+              key: faixa.id,
+              name: faixa.name,
+              level: faixa.level,
+              colors: faixa.colors,
+              position: faixa.position,
+              students: 0,
+            };
+            bar.students += 1;
+            grupo.bars.set(faixa.id, bar);
+          }
 
           if (vigentes.length === 0) continue;
 
@@ -591,15 +609,24 @@ export const dashboardRouter = createTRPCRouter({
             byPlan: Array.from(byPlan.entries())
               .map(([name, value]) => ({ name, ...value }))
               .sort((a, b) => b.mrr - a.mrr),
-            /* Na ordem das modalidades e, dentro de cada uma, na ordem das
-               faixas; sem graduação fica por último. */
-            byGraduation: Array.from(byGraduation.values()).sort((a, b) => {
-              if (a.name === null) return 1;
-              if (b.name === null) return -1;
-              return (
-                a.modalityPosition - b.modalityPosition ||
-                a.position - b.position
-              );
+            /* Uma lista por modalidade com faixa, na ordem da academia; as
+               barras na ordem das faixas, e sem graduação por último. */
+            byGraduation: modalidadesComFaixa.map((modalidade) => {
+              const grupo = porModalidade.get(modalidade.id)!;
+              const bars: Array<GraduationBar> = Array.from(
+                grupo.bars.values(),
+              ).sort((a, b) => a.position - b.position);
+              if (grupo.semFaixa > 0) {
+                bars.push({
+                  key: `sem-${modalidade.id}`,
+                  name: null,
+                  level: null,
+                  colors: [],
+                  position: Number.MAX_SAFE_INTEGER,
+                  students: grupo.semFaixa,
+                });
+              }
+              return { modality: modalidade, bars };
             }),
             expensesByCategory,
             incomeByMethod,

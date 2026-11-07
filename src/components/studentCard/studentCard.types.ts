@@ -16,7 +16,8 @@ export interface StudentRow {
   status: string;
   /** Uma por modalidade que o aluno faz hoje, na ordem da academia. */
   activeEnrollments: Array<ActiveEnrollmentRow>;
-  graduation?: GraduationView | null;
+  /** A faixa atual em cada modalidade. */
+  currentGraduations: Array<GraduationView>;
   createdAt: Date;
 }
 

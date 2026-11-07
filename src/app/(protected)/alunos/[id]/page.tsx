@@ -323,7 +323,9 @@ export default function StudentDetailPage({
 
         <GraduationCard
           studentId={student.id}
-          graduation={student.graduation}
+          studentName={student.name}
+          activeModalityIds={ativas.map((e) => e.modality.id)}
+          history={student.graduationHistory}
           onUpdated={refetch}
         />
       </div>
@@ -373,15 +375,21 @@ export default function StudentDetailPage({
           <Field label="Nascimento" value={formatDate(student.birthDate)} />
           <Field label="Matriculado em" value={formatDate(student.createdAt)} />
           <Field
-            label="Graduação"
+            label={
+              student.currentGraduations.length > 1 ? 'Graduações' : 'Graduação'
+            }
             value={
-              student.graduation
-                ? [
-                    student.graduation.modality.name,
-                    descreverGraduacao(student.graduation).split(' · ')[0],
-                    student.graduation.name,
-                  ].join(' · ')
-                : 'Sem graduação'
+              student.currentGraduations.length === 0
+                ? 'Sem graduação'
+                : student.currentGraduations
+                    .map(({ graduation }) =>
+                      [
+                        graduation.modality.name,
+                        descreverGraduacao(graduation).split(' · ')[0],
+                        graduation.name,
+                      ].join(' · '),
+                    )
+                    .join(' | ')
             }
           />
           <Field

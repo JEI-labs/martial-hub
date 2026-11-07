@@ -14,6 +14,10 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import {
+  GraduationBadge,
+  type GraduationView,
+} from '@/components/graduationBadge/graduationBadge.component';
+import {
   comDesconto,
   descontosDasMatriculas,
   precoNaModalidade,
@@ -25,7 +29,15 @@ import type {
 } from '@/server/validations/students';
 import { maskBRL } from '@/utils/masksUtils';
 
-type Modalidade = { id: string; name: string };
+type Modalidade = {
+  id: string;
+  name: string;
+  /** O catálogo de faixas da modalidade; vazio em boxe e afins. */
+  graduations?: Array<GraduationView & { id: string }>;
+};
+
+/** Valor do select para "sem faixa": o Radix não aceita item vazio. */
+const SEM_FAIXA = '__sem_faixa__';
 type Plano = {
   id: string;
   name: string;
@@ -139,6 +151,13 @@ export function EnrollmentsField({
     };
   };
 
+  const trocarFaixa = (modalityId: string, graduationId: string | null) =>
+    gravar(
+      escolhidas.map((e) =>
+        e.modalityId === modalityId ? { ...e, graduationId } : e,
+      ),
+    );
+
   const trocarPlano = (modalityId: string, planId: string) =>
     gravar(
       escolhidas.map((e) =>
@@ -198,6 +217,41 @@ export function EnrollmentsField({
                         · {plano.duration}{' '}
                         {plano.duration === 1 ? 'mês' : 'meses'} ·{' '}
                         {PLAN_BILLING_LABEL[plano.billing]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+
+              {/* A faixa com que ele já chega nesta modalidade, se tiver:
+                  vira o primeiro registro do histórico dele. */}
+              {escolhida && (modalidade.graduations?.length ?? 0) > 0 && (
+                <Select
+                  value={escolhida.graduationId ?? SEM_FAIXA}
+                  onValueChange={(valor) =>
+                    trocarFaixa(
+                      modalidade.id,
+                      valor === SEM_FAIXA ? null : valor,
+                    )
+                  }
+                >
+                  <SelectTrigger
+                    className="w-full sm:ml-auto sm:w-64"
+                    aria-label={`Faixa em ${modalidade.name}`}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SEM_FAIXA}>Sem faixa</SelectItem>
+                    {modalidade.graduations?.map((faixa) => (
+                      <SelectItem key={faixa.id} value={faixa.id}>
+                        <span className="flex items-center gap-2">
+                          <GraduationBadge
+                            graduation={faixa}
+                            showLabel={false}
+                          />
+                          {faixa.position + 1}º · {faixa.name}
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -184,8 +184,13 @@ export const modalitiesRouter = createTRPCRouter({
          faixas (e com elas a graduação dos alunos) e o histórico de
          matrícula de quem a fez — inclusive de quem já saiu. */
       const [alunosComFaixa, matriculas] = await Promise.all([
+        /* Quem já teve faixa dela, mesmo que hoje esteja em outra: é o
+           histórico de evolução do aluno. */
         ctx.prisma.student.count({
-          where: { tenantId, graduation: { modalityId: alvo.id } },
+          where: {
+            tenantId,
+            graduations: { some: { graduation: { modalityId: alvo.id } } },
+          },
         }),
         ctx.prisma.enrollment.count({ where: { modalityId: alvo.id } }),
       ]);

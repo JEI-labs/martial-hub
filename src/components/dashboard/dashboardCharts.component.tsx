@@ -25,6 +25,13 @@ import {
 } from '@/components/ui/card';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   ChartContainer,
   ChartLegend,
   ChartLegendContent,
@@ -597,34 +604,21 @@ export function GraduationChart({
     students: { label: 'Alunos', color: 'hsl(var(--chart-3))' },
   } satisfies ChartConfig;
 
-  /* Com mais de uma modalidade, "4º" sozinho é ambíguo: o eixo ganha a sigla
-     dela (MT 4º, JJ 2º) e o tooltip, o nome inteiro. */
-  const variasModalidades =
-    new Set(byGraduation.map((item) => item.modality).filter(Boolean)).size > 1;
-  const sigla = (nome: string) =>
-    nome
-      .split(/[\s-]+/)
-      .map((parte) => parte.charAt(0))
-      .join('')
-      .toUpperCase()
-      .slice(0, 3);
+  /* Uma modalidade por vez: misturar catálogos num gráfico só deixaria o
+     "4º" do muay thai ao lado da "Azul" do jiu-jitsu. Começa na primeira, e
+     academia de uma modalidade só nem vê o seletor. */
+  const [modalityId, setModalityId] = React.useState<string | null>(null);
+  const grupo =
+    byGraduation.find((item) => item.modality.id === modalityId) ??
+    byGraduation[0];
 
-  const data = byGraduation.map((item) => {
+  const data = (grupo?.bars ?? []).map((item) => {
     const isNone = item.name === null;
-    const grau = `${item.position + 1}º`;
 
     return {
       ...item,
-      label: isNone
-        ? 'Sem graduação'
-        : variasModalidades && item.modality
-          ? `${sigla(item.modality)} ${grau}`
-          : grau,
-      full: isNone
-        ? 'Sem graduação'
-        : [variasModalidades ? item.modality : null, item.name]
-            .filter(Boolean)
-            .join(' · '),
+      label: isNone ? 'Sem graduação' : `${item.position + 1}º`,
+      full: isNone ? 'Sem graduação' : (item.name ?? ''),
     };
   });
 
@@ -635,10 +629,42 @@ export function GraduationChart({
   return (
     <ChartCard
       title="Alunos por graduação"
-      description="Cada barra usa as cores da faixa"
+      description={
+        grupo
+          ? `Alunos de ${grupo.modality.name} pela faixa atual; cada barra usa as cores dela`
+          : 'Cada barra usa as cores da faixa'
+      }
+      headerRight={
+        byGraduation.length > 1 ? (
+          <Select
+            value={grupo?.modality.id}
+            onValueChange={(value) => setModalityId(value)}
+          >
+            <SelectTrigger
+              className="h-8 w-40"
+              aria-label="Modalidade do gráfico"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {byGraduation.map((item) => (
+                <SelectItem key={item.modality.id} value={item.modality.id}>
+                  {item.modality.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : undefined
+      }
     >
       {data.length === 0 ? (
-        <NoData text="Nenhum aluno cadastrado." />
+        <NoData
+          text={
+            grupo
+              ? `Nenhum aluno matriculado em ${grupo.modality.name}.`
+              : 'Nenhuma modalidade com faixa cadastrada.'
+          }
+        />
       ) : (
         <ChartContainer
           config={config}

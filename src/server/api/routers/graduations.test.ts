@@ -45,16 +45,26 @@ const novaAcademia = async () => {
   return tenant.id;
 };
 
-const novoAluno = (tenantId: string, graduationId: string | null = null) =>
-  prisma.student.create({
+/** Um aluno, com a faixa (no histórico) se o teste pedir. */
+const novoAluno = async (
+  tenantId: string,
+  graduationId: string | null = null,
+) => {
+  const aluno = await prisma.student.create({
     data: {
       name: 'Aluno de teste',
       email: `a-${randomUUID().slice(0, 8)}@teste.com`,
       phone: '11999999999',
       tenantId,
-      graduationId,
     },
   });
+  if (graduationId) {
+    await prisma.studentGraduation.create({
+      data: { studentId: aluno.id, graduationId },
+    });
+  }
+  return aluno;
+};
 
 const faixasDe = (modalityId: string) =>
   prisma.graduation.findMany({
@@ -177,53 +187,14 @@ describe('graduations.list', () => {
 });
 
 describe('a faixa do aluno', () => {
-  it('recusa faixa de outra academia', async () => {
-    const deB = await como(b).modalities.create({ name: 'Muay Thai' });
-    const [faixaDeB] = await prisma.graduation.findMany({
-      where: { modalityId: deB.id },
-    });
-    const aluno = await novoAluno(a);
-
-    await expect(
-      como(a).student.updateGraduation({
-        id: aluno.id,
-        graduationId: faixaDeB!.id,
-      }),
-    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
-
-    const depois = await prisma.student.findUnique({ where: { id: aluno.id } });
-    expect(depois?.graduationId).toBeNull();
-  });
-
-  it('o professor dá e tira a faixa', async () => {
-    const mt = await como(a).modalities.create({ name: 'Muay Thai' });
-    const faixa = await prisma.graduation.findFirst({
-      where: { modalityId: mt.id, position: 3 },
-    });
-    const aluno = await novoAluno(a);
-    const professor = como(a, EUserRole.TEACHER).student;
-
-    await professor.updateGraduation({ id: aluno.id, graduationId: faixa!.id });
-    expect(
-      (await prisma.student.findUnique({ where: { id: aluno.id } }))
-        ?.graduationId,
-    ).toBe(faixa!.id);
-
-    await professor.updateGraduation({ id: aluno.id, graduationId: null });
-    expect(
-      (await prisma.student.findUnique({ where: { id: aluno.id } }))
-        ?.graduationId,
-    ).toBeNull();
-  });
-
-  it('editar o aluno sem mandar a graduação não apaga a faixa', async () => {
+  it('editar o aluno não mexe no histórico de graduação', async () => {
     const mt = await como(a).modalities.create({ name: 'Muay Thai' });
     const faixa = await prisma.graduation.findFirst({
       where: { modalityId: mt.id, position: 3 },
     });
     const aluno = await novoAluno(a, faixa!.id);
 
-    /* É o que o formulário de edição manda: tudo, menos a graduação. */
+    /* É o que o formulário de edição manda: os dados da pessoa. */
     await como(a).student.updateByID({
       id: aluno.id,
       name: 'Nome novo',
@@ -233,9 +204,10 @@ describe('a faixa do aluno', () => {
       birthDate: '01/01/2000',
     });
 
-    const depois = await prisma.student.findUnique({ where: { id: aluno.id } });
-    expect(depois?.name).toBe('Nome novo');
-    expect(depois?.graduationId).toBe(faixa!.id);
+    const historico = await prisma.studentGraduation.findMany({
+      where: { studentId: aluno.id },
+    });
+    expect(historico.map((r) => r.graduationId)).toEqual([faixa!.id]);
   });
 });
 
@@ -253,9 +225,8 @@ describe('apagar modalidade com faixa em uso', () => {
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 
     /* Sem ninguém graduado nela, apaga — e as faixas vão junto. */
-    await prisma.student.update({
-      where: { id: aluno.id },
-      data: { graduationId: null },
+    await prisma.studentGraduation.deleteMany({
+      where: { studentId: aluno.id },
     });
     await como(a).modalities.remove({ id: mt.id });
 

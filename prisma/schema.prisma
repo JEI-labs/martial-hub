@@ -237,30 +237,26 @@ model User {
   messageAutomations MessageAutomation[]
   supportAccesses    SupportAccess[]
   appointments       Appointment[]
+  graduationsGiven   StudentGraduation[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
 }
 
 model Student {
-  id           String      @id @default(uuid())
-  name         String
-  email        String
-  phone        String
-  avatar       String?
-  birthDate    DateTime?
-  /// Faixa atual do aluno, de uma das modalidades da academia. Opcional:
-  /// aluno novo pode entrar sem graduação até o professor definir.
-  graduationId String?
-  /// NoAction, e não SetNull: apagar uma faixa em uso tiraria a graduação do
-  /// aluno em silêncio. O banco recusa; quem apaga tem de mover os alunos
-  /// antes. (Diferente de Restrict, só confere no fim do comando — apagar a
-  /// academia inteira, que leva aluno e faixa juntos, continua funcionando.)
-  graduation   Graduation? @relation(fields: [graduationId], references: [id], onDelete: NoAction)
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id        String    @id @default(uuid())
+  name      String
+  email     String
+  phone     String
+  avatar    String?
+  birthDate DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   enrollments  Enrollment[]
+  /// As graduações do aluno, em todas as modalidades, desde a primeira. A
+  /// faixa atual em cada modalidade é a mais recente dela.
+  graduations  StudentGraduation[]
   payments     Payment[]
   messageLogs  MessageLog[]
   appointments AppointmentStudent[]
@@ -279,9 +275,6 @@ model Student {
   /// O mesmo e-mail pode treinar em duas academias; dentro de uma, não.
   @@unique([tenantId, email])
   @@index([tenantId])
-  /// Saber se uma faixa está em uso (antes de apagar a modalidade) não pode
-  /// varrer todos os alunos.
-  @@index([graduationId])
 }
 
 /// O que a academia ensina: muay thai, boxe, jiu-jitsu… Cada academia tem as
@@ -332,9 +325,39 @@ model Graduation {
   modalityId String
   modality   Modality @relation(fields: [modalityId], references: [id], onDelete: Cascade)
 
-  students Student[]
+  awards StudentGraduation[]
 
   @@index([modalityId, position])
+}
+
+/// Uma graduação dada a um aluno: a faixa, o dia e quem registrou. Cada troca
+/// de faixa é um registro novo, e a faixa atual do aluno numa modalidade é a
+/// mais recente dela — as anteriores são a linha do tempo da evolução.
+/// A modalidade vem da faixa, não é guardada de novo aqui.
+model StudentGraduation {
+  id        String   @id @default(uuid())
+  /// O dia em que a faixa foi dada. Pode ser anterior ao registro: o
+  /// professor lança o exame da semana passada.
+  awardedAt DateTime @default(now())
+  /// "Exame de março", "graduação por mérito"…
+  note      String?
+  createdAt DateTime @default(now())
+
+  studentId String
+  student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  /// NoAction: apagar uma faixa que está no histórico de alguém é recusado,
+  /// em vez de apagar a evolução do aluno. Só confere no fim do comando, então
+  /// apagar a academia inteira continua funcionando.
+  graduationId String
+  graduation   Graduation @relation(fields: [graduationId], references: [id], onDelete: NoAction)
+
+  /// Quem registrou. A graduação fica mesmo que a conta saia.
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([studentId, awardedAt])
+  @@index([graduationId])
 }
 
 model Plan {

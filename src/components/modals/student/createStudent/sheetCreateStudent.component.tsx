@@ -1,9 +1,5 @@
 'use client';
 
-import {
-  GraduationBadge,
-  descreverGraduacao,
-} from '@/components/graduationBadge/graduationBadge.component';
 import { FormModal } from '@/components/formModal/formModal.component';
 
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -28,7 +24,6 @@ import {
 } from '@/server/validations/students';
 import { blobUrlToBase64 } from '@/common/utils/files';
 import { AvatarField } from '@/components/forms/avatarField/avatarField.component';
-import { FormSelectComponent } from '@/components/forms/formSelectInput/formSelectInput.component';
 import { getInitials } from '@/utils/masksUtils';
 
 export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
@@ -43,28 +38,11 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
   const { data: plansData } = plansApi;
   const defaultPlanId = plansData?.data.find((plan) => plan.isDefault)?.id;
 
-  /* As faixas das modalidades ativas que têm faixa. Boxe e afins não entram,
-     e academia sem nenhuma não mostra o campo. */
+  /* As modalidades ativas, cada uma com o seu catálogo de faixas: a faixa
+     com que o aluno chega é escolhida na linha da modalidade. */
   const { data: modalidades } = api.graduations.list.useQuery(undefined, {
     staleTime: 5 * 60 * 1000,
   });
-  const comFaixas = (modalidades ?? []).filter(
-    (modalidade) => modalidade.graduations.length > 0,
-  );
-  const variasModalidades = comFaixas.length > 1;
-  const opcoesDeGraduacao = comFaixas.flatMap((modalidade) =>
-    modalidade.graduations.map((faixa) => ({
-      value: faixa.id,
-      textValue: [
-        variasModalidades ? modalidade.name : null,
-        descreverGraduacao(faixa).split(' · ')[0],
-        faixa.name,
-      ]
-        .filter(Boolean)
-        .join(' · '),
-      icon: <GraduationBadge graduation={faixa} showLabel={false} />,
-    })),
-  );
 
   const createUser = api.student.create.useMutation();
   const updateUser = api.student.updateAvatar.useMutation();
@@ -78,10 +56,7 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
 
   /* As modalidades ativas, na ordem da academia: cada uma pode virar uma
      matrícula. Vêm da lista de graduações, que já traz só as ativas. */
-  const modalidadesAtivas = (modalidades ?? []).map(({ id, name }) => ({
-    id,
-    name,
-  }));
+  const modalidadesAtivas = modalidades ?? [];
   const enrollmentsError =
     form.formState.errors.enrollments?.message ??
     form.formState.errors.enrollments?.root?.message ??
@@ -224,19 +199,6 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
             open={isOpen}
             error={enrollmentsError}
           />
-
-          {opcoesDeGraduacao.length > 0 && (
-            <FormSelectComponent
-              control={form.control}
-              name="graduationId"
-              label="Graduação"
-              tooltip="Faixa atual do aluno. Pode ficar em branco até a primeira graduação."
-              placeholder="Sem graduação"
-              /* aluno novo entra sem graduação, e dá para voltar a esse estado */
-              hasEmptyOption
-              options={opcoesDeGraduacao}
-            />
-          )}
         </section>
       </FormModal>
     </Form>
