@@ -17,13 +17,13 @@ import { del } from '@vercel/blob';
 import {
   EFinanceEntryStatus,
   EFinanceEntryType,
-  EGraduation,
   EPaymentMethod,
   EPlanBilling,
   PaymentStatus,
   Prisma,
 } from '@prisma/client';
 import { getAllStudentInputSchema } from '@/server/validations/pagination';
+import { conferirGraduacao, graduationSelect } from '@/server/graduations';
 import { deriveStudentStatus } from '@/server/utils/studentStatus';
 import { installmentCount, splitIntoInstallments } from '@/utils/planUtils';
 import { format } from 'date-fns';
@@ -58,6 +58,8 @@ export const studentRouter = createTRPCRouter({
         });
       }
 
+      await conferirGraduacao(ctx.prisma, tenantId, input.graduationId);
+
       // 2) Carrega o plano
       const plan = await ctx.prisma.plan.findUnique({
         where: { id: input.planId },
@@ -78,7 +80,7 @@ export const studentRouter = createTRPCRouter({
               name: input.name,
               phone: input.phone,
               birthDate: birthDateFormatted,
-              graduation: input.graduation ?? null,
+              graduationId: input.graduationId ?? null,
               avatar: input.avatarUrl,
               userId,
               tenantId,
@@ -246,6 +248,8 @@ export const studentRouter = createTRPCRouter({
         });
       }
 
+      await conferirGraduacao(ctx.prisma, tenantId, input.graduationId);
+
       const updated = await ctx.prisma.student.update({
         where: { id: input.id, tenantId },
         data: {
@@ -253,7 +257,11 @@ export const studentRouter = createTRPCRouter({
           email: input.email,
           phone: input.phone,
           birthDate: birthDateFormatted,
-          graduation: input.graduation ?? null,
+          /* Só quando veio: o formulário de edição não manda a graduação, e
+             gravar nulo nesse caso apagava a faixa de quem era editado. */
+          ...(input.graduationId !== undefined
+            ? { graduationId: input.graduationId }
+            : {}),
         },
       });
 
@@ -268,7 +276,7 @@ export const studentRouter = createTRPCRouter({
     .input(
       z.object({
         id: z.string(),
-        graduation: z.nativeEnum(EGraduation).nullable(),
+        graduationId: z.string().uuid().nullable(),
       }),
     )
     .mutation(async ({ input, ctx }) => {
@@ -282,11 +290,13 @@ export const studentRouter = createTRPCRouter({
         });
       }
 
-      // updateMany para o filtro por userId entrar no WHERE: um update
-      // simples por id deixaria alterar aluno de outro usuário
+      await conferirGraduacao(ctx.prisma, tenantId, input.graduationId);
+
+      // updateMany para o filtro por tenant entrar no WHERE: um update
+      // simples por id deixaria alterar aluno de outra academia
       const result = await ctx.prisma.student.updateMany({
         where: { id: input.id, tenantId },
-        data: { graduation: input.graduation },
+        data: { graduationId: input.graduationId },
       });
 
       if (result.count === 0) {
@@ -348,6 +358,7 @@ export const studentRouter = createTRPCRouter({
                 where: { isActive: true },
                 include: { plan: true },
               },
+              graduation: { select: graduationSelect },
             },
           }),
           // precisa dos mesmos filtros do findMany: contando só por tenantId,
@@ -435,6 +446,7 @@ export const studentRouter = createTRPCRouter({
             include: { category: true },
             orderBy: { date: 'desc' },
           },
+          graduation: { select: graduationSelect },
         },
       });
 

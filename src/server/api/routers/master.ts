@@ -26,6 +26,7 @@ import {
 import { recomendaDoisFatores } from '@/server/auth/twoFactor';
 import { gerarSenhaTemporaria } from '@/server/auth/temporaryPassword';
 import { criarBilheteDeSuporte } from '@/server/support/handoff';
+import { graduacoesDoCatalogo } from '@/common/constants/graduations';
 import { slugify } from '@/common/utils/string';
 import { modalityNameSchema } from '@/server/validations/modalities';
 import {
@@ -54,11 +55,17 @@ function modalidadesIniciais(nomes: Array<string>) {
     return true;
   });
 
-  return unicos.map((name, position) => ({
-    name,
-    slug: slugify(name),
-    position,
-  }));
+  return unicos.map((name, position) => {
+    const slug = slugify(name);
+
+    return {
+      name,
+      slug,
+      position,
+      /* Com as faixas do catálogo, quando ele conhece a modalidade. */
+      graduations: { create: graduacoesDoCatalogo(slug) },
+    };
+  });
 }
 
 /** Slug vira subdomínio, então o alfabeto é o da URL. */

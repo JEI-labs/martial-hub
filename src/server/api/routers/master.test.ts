@@ -132,6 +132,22 @@ describe('createTenant escolhe as modalidades', () => {
     ]);
   });
 
+  it('cada modalidade nasce com as faixas do catálogo, boxe sem', async () => {
+    const { slug } = await criarAcademia(['Muay Thai', 'Jiu-Jitsu', 'Boxe']);
+
+    const faixas = await prisma.modality.findMany({
+      where: { tenant: { slug } },
+      orderBy: { position: 'asc' },
+      select: { slug: true, _count: { select: { graduations: true } } },
+    });
+
+    expect(faixas.map((m) => [m.slug, m._count.graduations])).toEqual([
+      ['muay-thai', 11],
+      ['jiu-jitsu', 20],
+      ['boxe', 0],
+    ]);
+  });
+
   it('sem nenhuma escolhida, nasce com as modalidades pendentes', async () => {
     for (const escolha of [undefined, []]) {
       const { modalidades } = await criarAcademia(escolha);

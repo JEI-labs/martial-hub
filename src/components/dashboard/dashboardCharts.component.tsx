@@ -32,9 +32,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from '@/components/ui/chart';
-import { GRADUATIONS } from '@/common/constants/graduations';
 import type { RouterOutputs } from '@/trpc/react';
-import type { EGraduation } from '@prisma/client';
 
 type Overview = RouterOutputs['dashboard']['getOverview'];
 type Series = Overview['series'];
@@ -599,16 +597,34 @@ export function GraduationChart({
     students: { label: 'Alunos', color: 'hsl(var(--chart-3))' },
   } satisfies ChartConfig;
 
+  /* Com mais de uma modalidade, "4º" sozinho é ambíguo: o eixo ganha a sigla
+     dela (MT 4º, JJ 2º) e o tooltip, o nome inteiro. */
+  const variasModalidades =
+    new Set(byGraduation.map((item) => item.modality).filter(Boolean)).size > 1;
+  const sigla = (nome: string) =>
+    nome
+      .split(/[\s-]+/)
+      .map((parte) => parte.charAt(0))
+      .join('')
+      .toUpperCase()
+      .slice(0, 3);
+
   const data = byGraduation.map((item) => {
-    const isNone = item.graduation === 'SEM_GRADUACAO';
-    const info = isNone ? null : GRADUATIONS[item.graduation as EGraduation];
+    const isNone = item.name === null;
+    const grau = `${item.position + 1}º`;
 
     return {
       ...item,
-      key: String(item.graduation),
-      label: isNone ? 'Sem graduação' : `${info?.degree}º`,
-      full: isNone ? 'Sem graduação' : (info?.label ?? ''),
-      colors: info?.colors ?? [],
+      label: isNone
+        ? 'Sem graduação'
+        : variasModalidades && item.modality
+          ? `${sigla(item.modality)} ${grau}`
+          : grau,
+      full: isNone
+        ? 'Sem graduação'
+        : [variasModalidades ? item.modality : null, item.name]
+            .filter(Boolean)
+            .join(' · '),
     };
   });
 
@@ -619,7 +635,7 @@ export function GraduationChart({
   return (
     <ChartCard
       title="Alunos por graduação"
-      description="Cada barra usa as cores da fita do grau"
+      description="Cada barra usa as cores da faixa"
     >
       {data.length === 0 ? (
         <NoData text="Nenhum aluno cadastrado." />

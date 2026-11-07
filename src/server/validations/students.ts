@@ -1,4 +1,3 @@
-import { EGraduation } from '@prisma/client';
 import { z } from 'zod';
 
 export const createStudentSchema = z.object({
@@ -7,8 +6,10 @@ export const createStudentSchema = z.object({
   phone: z.string().min(10, 'Por favor, insira um telefone válido'),
   planId: z.string().uuid('Selecione um plano'),
   avatarUrl: z.string().nullable(),
-  // opcional: nem todo aluno novo já tem graduação definida
-  graduation: z.nativeEnum(EGraduation).nullable().optional(),
+  /* Opcional: nem todo aluno novo já tem graduação definida. Ausente quer
+     dizer "não mexer" — a edição do aluno não manda este campo, e tratá-lo
+     como nulo apagava a faixa de quem era editado. */
+  graduationId: z.string().uuid().nullable().optional(),
   birthDate: z.string().superRefine((val, ctx) => {
     if (!val || val.trim() === '') {
       ctx.addIssue({
@@ -64,6 +65,6 @@ export const defaultCreateStudentValues = {
   phone: '',
   avatarUrl: '',
   planId: '',
-  graduation: null,
+  graduationId: null,
   birthDate: undefined,
 };

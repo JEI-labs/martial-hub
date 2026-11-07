@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
+import { graduacoesDoCatalogo } from '@/common/constants/graduations';
 import { slugify } from '@/common/utils/string';
 import {
   createTRPCRouter,
@@ -69,6 +70,9 @@ export const modalitiesRouter = createTRPCRouter({
             slug,
             position: (ultima._max.position ?? -1) + 1,
             tenantId,
+            /* Nasce com as faixas do catálogo, quando ele conhece a
+               modalidade; boxe e nomes livres nascem sem. */
+            graduations: { create: graduacoesDoCatalogo(slug) },
           },
         });
       } catch (err) {
@@ -176,9 +180,20 @@ export const modalitiesRouter = createTRPCRouter({
         });
       }
 
-      /* Por enquanto nada aponta para modalidade. Quando matrícula (#35) e
-         graduação (#34) apontarem, a que estiver em uso só pode ser
-         desativada — a trava entra aqui, com elas. */
+      /* Modalidade em uso só pode ser desativada: apagar levaria junto as
+         faixas, e com elas a graduação dos alunos. A matrícula (#35) entra
+         nesta mesma trava quando apontar para modalidade. */
+      const alunosComFaixa = await ctx.prisma.student.count({
+        where: { tenantId, graduation: { modalityId: alvo.id } },
+      });
+
+      if (alunosComFaixa > 0) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `${alunosComFaixa} ${alunosComFaixa === 1 ? 'aluno tem' : 'alunos têm'} faixa de ${alvo.name}. Desative a modalidade em vez de apagar.`,
+        });
+      }
+
       if (alvo.isActive) {
         await garantirOutraAtiva(ctx.prisma, tenantId, alvo.id);
       }
