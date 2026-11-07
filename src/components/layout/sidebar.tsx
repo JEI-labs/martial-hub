@@ -1,6 +1,12 @@
 'use client';
 
-import { Boxes, LayoutDashboard, ReceiptText, Users } from 'lucide-react';
+import {
+  Boxes,
+  CalendarClock,
+  LayoutDashboard,
+  ReceiptText,
+  Users,
+} from 'lucide-react';
 /* Glifo da marca vem do react-icons, que já é dependência: desenhar logo de
    memória sai errado. */
 import { FaWhatsapp } from 'react-icons/fa';
@@ -36,6 +42,7 @@ interface SidebarItem {
 const sidebarItems: Array<SidebarItem> = [
   { title: 'Dashboard', url: '/painel', icon: LayoutDashboard },
   { title: 'Alunos', url: '/alunos', icon: Users },
+  { title: 'Agenda', url: '/agenda', icon: CalendarClock },
   { title: 'Financeiro', url: '/financeiro', icon: ReceiptText },
   { title: 'Cadastros', url: '/cadastros', icon: Boxes },
   { title: 'WhatsApp', url: '/whatsapp', icon: FaWhatsapp },

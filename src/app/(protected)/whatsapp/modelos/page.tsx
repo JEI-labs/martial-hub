@@ -17,21 +17,8 @@ export default function WhatsappTemplatesPage() {
       <BreadcrumbUpdater items={breadcrumbItems} />
 
       <div className="flex flex-col gap-4">
-        <PageIntro
-          icon={MessageSquareText}
-          title="O que é um modelo?"
-          example={
-            <>
-              Para <em>Pagamento atrasado</em>: &ldquo;Oi {'{{primeiro_nome}}'},
-              sua parcela venceu. Consegue acertar hoje?&rdquo; — o sistema
-              troca o {'{{primeiro_nome}}'} pelo nome de cada aluno na hora do
-              envio.
-            </>
-          }
-        >
-          É o texto pronto de cada situação. Você escreve uma vez, marca para
-          qual evento serve, e o sistema usa esse texto sempre que precisar
-          falar com um aluno naquela situação.
+        <PageIntro icon={MessageSquareText} title="Modelos">
+          O texto pronto de cada situação.
         </PageIntro>
 
         <MessageTemplatesCard />

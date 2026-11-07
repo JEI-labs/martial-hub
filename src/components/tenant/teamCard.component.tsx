@@ -5,13 +5,7 @@ import { EUserRole } from '@prisma/client';
 import { Loader2, Plus, UserMinus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -75,13 +69,9 @@ export function TeamCard({ currentUserId }: { currentUserId: string }) {
 
   return (
     <Card>
-      <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+      <CardHeader className="flex-col gap-3 space-y-0 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <CardTitle>Equipe</CardTitle>
-          <CardDescription>
-            Cada pessoa entra com o próprio login, e o papel decide o que ela
-            pode fazer.
-          </CardDescription>
         </div>
 
         <Button onClick={() => setNovoAberto(true)}>
@@ -160,18 +150,6 @@ export function TeamCard({ currentUserId }: { currentUserId: string }) {
                 </div>
               );
             })}
-
-        {/* O que cada papel faz, para a escolha acima não ser adivinhação. */}
-        <div className="text-muted-foreground mt-2 space-y-1 text-xs">
-          {ASSIGNABLE_ROLES.map((papel) => (
-            <p key={papel}>
-              <strong className="text-foreground font-medium">
-                {ROLE_INFO[papel].label}:
-              </strong>{' '}
-              {ROLE_INFO[papel].description}
-            </p>
-          ))}
-        </div>
       </CardContent>
 
       <NovaPessoa

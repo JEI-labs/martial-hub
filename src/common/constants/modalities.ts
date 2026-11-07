@@ -13,10 +13,3 @@ export const MODALITY_CATALOG = [
   'Kickboxing',
   'Capoeira',
 ] as const;
-
-/**
- * A modalidade com que toda academia nasce. É Muay Thai porque é o que o
- * sistema assumia até aqui — as faixas de `graduations.ts` são dela. A escolha
- * na criação da academia vem na #33.
- */
-export const DEFAULT_MODALITY = 'Muay Thai';

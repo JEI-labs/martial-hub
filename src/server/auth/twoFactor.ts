@@ -11,15 +11,28 @@ import { montarUri } from './totp';
 export { conferirCodigo, gerarSegredo } from './totp';
 
 /**
- * Quem é obrigado a ter verificação em duas etapas.
+ * Quem é obrigado a ter verificação em duas etapas: só o dono do sistema.
  *
- * Dono de academia e dono do sistema: são as contas que abrem o dado de todo
- * mundo — alunos, dinheiro, e no caso do master, de todas as academias. Para
- * recepção e professor fica opcional; exigir de quem só registra pagamento
- * cria atrito sem reduzir risco na mesma proporção.
+ * A conta dele não abre uma academia, abre todas — e junto o painel que cria,
+ * suspende e entra como suporte em qualquer uma. Uma senha vazada aí não é um
+ * cliente comprometido, é a carteira inteira. Para um punhado de contas
+ * internas, exigir não cria atrito de adoção nenhum.
  */
 export function exigeDoisFatores(papel: EUserRole): boolean {
-  return papel === EUserRole.OWNER || papel === EUserRole.MASTER;
+  return papel === EUserRole.MASTER;
+}
+
+/**
+ * Para quem ela é fortemente recomendada, sem ser exigida.
+ *
+ * Dono de academia: a conta abre os dados de todos os alunos e o financeiro.
+ * Mas cobrar antes do primeiro acesso transformava a porta de entrada numa
+ * parede, e quem chega para conhecer o sistema desiste antes de ver o
+ * sistema. O lugar de insistir é a tela de segurança, onde dá para explicar
+ * o porquê.
+ */
+export function recomendaDoisFatores(papel: EUserRole): boolean {
+  return papel === EUserRole.OWNER;
 }
 
 export async function gerarQrCode(
@@ -77,16 +90,4 @@ export async function usarCodigoDeRecuperacao(
   }
 
   return { ok: false, restantes: guardados };
-}
-
-/** Se a conta já configurou a segunda etapa. */
-export async function temDoisFatores(userId: string): Promise<boolean> {
-  const { prisma } = await import('@/server/db');
-
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { twoFactorEnabledAt: true },
-  });
-
-  return Boolean(user?.twoFactorEnabledAt);
 }

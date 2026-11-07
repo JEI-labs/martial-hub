@@ -60,22 +60,8 @@ export default function PromotionsPage() {
       <BreadcrumbUpdater items={breadcrumbItems} />
 
       <main className="flex flex-col gap-4">
-        <PageIntro
-          icon={Tag}
-          title="O que é uma promoção?"
-          example={
-            <>
-              <strong className="text-foreground font-medium">
-                Matrícula de janeiro
-              </strong>{' '}
-              — 20% de desconto, valendo de 01/01 a 31/01. Numa parcela de R$
-              150, abate R$ 30.
-            </>
-          }
-        >
-          É um desconto com prazo de validade, em porcentagem ou em valor fixo,
-          para abater na parcela do aluno. Fora do período, ou desativada, ela
-          deixa de valer.
+        <PageIntro icon={Tag} title="Promoções">
+          Desconto com prazo, para abater na parcela.
         </PageIntro>
 
         <ListToolbar

@@ -8,7 +8,7 @@ import { TRPCError } from '@trpc/server';
 import { hash } from 'argon2';
 import { z } from 'zod';
 
-import { exigeDoisFatores } from '@/server/auth/twoFactor';
+import { recomendaDoisFatores } from '@/server/auth/twoFactor';
 import {
   aplicarRegraDeCobranca,
   faseDaCobranca,
@@ -114,8 +114,8 @@ export const tenantRouter = createTRPCRouter({
       ...membro,
       doisFatores: twoFactorEnabledAt
         ? ('ativo' as const)
-        : exigeDoisFatores(membro.role)
-          ? ('pendente' as const)
+        : recomendaDoisFatores(membro.role)
+          ? ('recomendado' as const)
           : ('opcional' as const),
       doisFatoresDesde: twoFactorEnabledAt,
     }));

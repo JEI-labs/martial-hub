@@ -1,10 +1,13 @@
 import { z } from 'zod';
 
-const name = z
+/** O nome de uma modalidade, onde quer que ela seja cadastrada. */
+export const modalityNameSchema = z
   .string()
   .trim()
   .min(1, 'Nome é obrigatório')
   .max(50, 'Nome muito longo');
+
+const name = modalityNameSchema;
 
 export const createModalitySchema = z.object({ name });
 

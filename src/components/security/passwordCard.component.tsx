@@ -45,7 +45,7 @@ export function PasswordCard() {
 
   return (
     <Card>
-      <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+      <CardHeader className="flex-col gap-3 space-y-0 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <CardTitle>Senha</CardTitle>
           <CardDescription>

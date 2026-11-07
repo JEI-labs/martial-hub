@@ -13,6 +13,8 @@ import { dashboardRouter } from './routers/dashboard';
 import { tenantRouter } from './routers/tenant';
 import { masterRouter } from './routers/master';
 import { securityRouter } from './routers/security';
+import { agendaRouter } from './routers/agenda';
+import { lessonTypesRouter } from './routers/lessonTypes';
 import { modalitiesRouter } from './routers/modalities';
 
 /**
@@ -35,6 +37,8 @@ export const appRouter = createTRPCRouter({
   tenant: tenantRouter,
   master: masterRouter,
   security: securityRouter,
+  agenda: agendaRouter,
+  lessonTypes: lessonTypesRouter,
   modalities: modalitiesRouter,
 });
 

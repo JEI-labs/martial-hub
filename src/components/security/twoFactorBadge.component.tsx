@@ -3,14 +3,17 @@ import { ShieldAlert, ShieldCheck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 /** O que o servidor responde sobre a segunda etapa de alguém. */
-export type EstadoDoisFatores = 'ativo' | 'pendente' | 'opcional';
+export type EstadoDoisFatores =
+  'ativo' | 'pendente' | 'recomendado' | 'opcional';
 
 /**
  * A situação da verificação em duas etapas de uma pessoa, em uma etiqueta.
  *
- * "Pendente" é vermelho porque quem é obrigado e não configurou está parado
- * na parede, sem usar o sistema. "Sem 2FA" é cinza: para recepção e
- * professor a etapa é opcional, e pintar isso de vermelho seria alarme falso.
+ * A cor segue o que está em jogo, não o quanto queremos insistir. Vermelho só
+ * em "pendente", que é o único estado que de fato trava alguém — conta master
+ * sem segunda etapa não entra no painel. Dono de academia fica em amarelo,
+ * porque é recomendação forte e nada está bloqueado; recepção e professor em
+ * cinza. Vermelho no que não bloqueia ensina a ignorar vermelho.
  */
 export function TwoFactorBadge({
   estado,
@@ -24,7 +27,13 @@ export function TwoFactorBadge({
   return (
     <Badge
       variant={
-        ativo ? 'success' : estado === 'pendente' ? 'destructive' : 'secondary'
+        ativo
+          ? 'success'
+          : estado === 'pendente'
+            ? 'destructive'
+            : estado === 'recomendado'
+              ? 'alert'
+              : 'secondary'
       }
       title={
         desde
@@ -38,7 +47,13 @@ export function TwoFactorBadge({
       ) : (
         <ShieldAlert className="size-3" aria-hidden />
       )}
-      {ativo ? '2FA ativo' : estado === 'pendente' ? '2FA pendente' : 'sem 2FA'}
+      {ativo
+        ? '2FA ativo'
+        : estado === 'pendente'
+          ? '2FA pendente'
+          : estado === 'recomendado'
+            ? '2FA recomendado'
+            : 'sem 2FA'}
     </Badge>
   );
 }

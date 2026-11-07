@@ -40,6 +40,7 @@ import {
   TopOverdueList,
 } from '@/components/dashboard/dashboardLists.component';
 import { BillingAlert } from '@/components/tenant/billingAlert.component';
+import { ModalitiesPendingAlert } from '@/components/modalities/modalitiesPendingAlert.component';
 import { api } from '@/trpc/react';
 import { useSession } from 'next-auth/react';
 import { maskBRL } from '@/utils/masksUtils';
@@ -122,10 +123,19 @@ export default function DashboardPage() {
             recepção. */}
         {session?.user.role === 'OWNER' && <BillingAlert />}
 
+        {/* Master em suporte também cadastra: ownerProcedure deixa. */}
+        {session && (
+          <ModalitiesPendingAlert
+            podeCadastrar={
+              session.user.role === 'OWNER' || session.user.role === 'MASTER'
+            }
+          />
+        )}
+
         {isLoading || !data ? (
           <div className="flex flex-col gap-6">
             <StatsSkeleton cards={9} />
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               {[0, 1, 2, 3].map((chart) => (
                 <div
                   key={chart}
@@ -140,7 +150,7 @@ export default function DashboardPage() {
           </div>
         ) : (
           <>
-            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               <KpiCard
                 label="MRR"
                 value={maskBRL(data.kpis.mrr, true)}
@@ -210,7 +220,7 @@ export default function DashboardPage() {
               />
             </section>
 
-            <section className="grid gap-4 lg:grid-cols-2">
+            <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <MrrChart series={data.series} />
               <CashflowChart series={data.series} />
               <StudentsFlowChart series={data.series} />
@@ -230,7 +240,7 @@ export default function DashboardPage() {
               </div>
             </section>
 
-            <section className="grid gap-4 lg:grid-cols-2">
+            <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               <TopOverdueList students={data.alerts.topOverdue} />
               <ExpiringEnrollmentsList
                 enrollments={data.alerts.expiringEnrollments}

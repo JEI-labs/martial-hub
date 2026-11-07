@@ -33,7 +33,7 @@ export default function MasterPainel() {
       {isLoading || !data ? (
         <StatsSkeleton cards={6} />
       ) : (
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <KpiCard
             label="MRR"
             value={maskBRL(data.mrr, true)}

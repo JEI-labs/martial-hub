@@ -16,17 +16,18 @@ import {
   removeDomain,
   vercelEnabled,
 } from '@/server/vercel/domains';
-import { rootDomain } from '@/server/tenant/resolve';
+import { masterHost, rootDomain } from '@/server/tenant/resolve';
 import {
   apontarSubdominio,
   dnsEnabled,
   nomeNaZona,
   removerSubdominio,
 } from '@/server/dns/hostinger';
-import { exigeDoisFatores } from '@/server/auth/twoFactor';
+import { recomendaDoisFatores } from '@/server/auth/twoFactor';
+import { gerarSenhaTemporaria } from '@/server/auth/temporaryPassword';
 import { criarBilheteDeSuporte } from '@/server/support/handoff';
-import { DEFAULT_MODALITY } from '@/common/constants/modalities';
 import { slugify } from '@/common/utils/string';
+import { modalityNameSchema } from '@/server/validations/modalities';
 import {
   DIAS_DE_AVISO,
   aplicarRegraDeCobranca,
@@ -34,6 +35,31 @@ import {
 } from '@/server/billing/invoices';
 
 const CENTS = 100;
+
+/**
+ * As modalidades com que a academia nasce, na ordem escolhida.
+ *
+ * Nome repetido ("Boxe" e "boxe") vira um só, porque o slug é único por
+ * academia e repetir derrubaria a criação inteira. Nenhuma escolhida é uma
+ * resposta válida: a academia nasce com as modalidades pendentes, e o painel
+ * dela avisa o dono até ele cadastrar — melhor do que chutar uma que ela
+ * talvez nem ensine.
+ */
+function modalidadesIniciais(nomes: Array<string>) {
+  const vistos = new Set<string>();
+  const unicos = nomes.filter((nome) => {
+    const slug = slugify(nome);
+    if (!slug || vistos.has(slug)) return false;
+    vistos.add(slug);
+    return true;
+  });
+
+  return unicos.map((name, position) => ({
+    name,
+    slug: slugify(name),
+    position,
+  }));
+}
 
 /** Slug vira subdomínio, então o alfabeto é o da URL. */
 const slugSchema = z
@@ -292,8 +318,8 @@ export const masterRouter = createTRPCRouter({
           ...usuario,
           doisFatores: twoFactorEnabledAt
             ? ('ativo' as const)
-            : exigeDoisFatores(usuario.role)
-              ? ('pendente' as const)
+            : recomendaDoisFatores(usuario.role)
+              ? ('recomendado' as const)
               : ('opcional' as const),
           doisFatoresDesde: twoFactorEnabledAt,
         })),
@@ -304,7 +330,8 @@ export const masterRouter = createTRPCRouter({
   /**
    * Nasce pronta para usar: academia, endereço, assinatura, dono, a
    * categoria fixa que recebe as mensalidades — sem ela, matricular aluno
-   * quebra no primeiro pagamento — e uma modalidade ativa.
+   * quebra no primeiro pagamento — e as modalidades que ela ensina, quando
+   * quem cria já sabe quais são.
    */
   createTenant: masterProcedure
     .input(
@@ -317,9 +344,13 @@ export const masterRouter = createTRPCRouter({
         ownerName: z.string().min(2).max(80),
         ownerEmail: z.string().email(),
         ownerPassword: z.string().min(6),
+        /** O que a academia ensina, na ordem em que vai aparecer. */
+        modalities: z.array(modalityNameSchema).max(20).default([]),
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const modalidades = modalidadesIniciais(input.modalities);
+
       const existe = await ctx.prisma.tenant.findUnique({
         where: { slug: input.slug },
       });
@@ -362,12 +393,11 @@ export const masterRouter = createTRPCRouter({
                 isFixed: true,
               },
             },
-            modalities: {
-              create: {
-                name: DEFAULT_MODALITY,
-                slug: slugify(DEFAULT_MODALITY),
-              },
-            },
+            /* Dentro da mesma criação: modalidade que falha desfaz a
+               academia inteira, em vez de deixá-la pela metade. */
+            ...(modalidades.length
+              ? { modalities: { create: modalidades } }
+              : {}),
             ...(hostname
               ? {
                   /* Sem `verifiedAt`: quem diz se o endereço está de pé é o
@@ -537,20 +567,87 @@ export const masterRouter = createTRPCRouter({
         /* Só a data em que ligou: segredo e códigos de recuperação são de
            cada um, e não saem daqui nem para outro master. */
         twoFactorEnabledAt: true,
+        mustChangePassword: true,
       },
       orderBy: { createdAt: 'asc' },
     });
 
-    return masters.map(({ twoFactorEnabledAt, ...master }) => ({
-      ...master,
-      souEu: master.id === ctx.session.user.id,
-      /* Master é sempre obrigado: nunca existe o estado "opcional" aqui. */
-      doisFatores: twoFactorEnabledAt
-        ? ('ativo' as const)
-        : ('pendente' as const),
-      doisFatoresDesde: twoFactorEnabledAt,
-    }));
+    return masters.map(
+      ({ twoFactorEnabledAt, mustChangePassword, ...master }) => ({
+        ...master,
+        souEu: master.id === ctx.session.user.id,
+        /* Conta criada que ainda não entrou: a senha temporária segue
+           valendo e circulando por onde foi mandada. */
+        primeiroAcessoPendente: mustChangePassword,
+        /* Para master a segunda etapa é obrigatória, então aqui só existem
+           dois estados — e "pendente" quer dizer que a pessoa está parada na
+           parede, sem conseguir usar o painel. */
+        doisFatores: twoFactorEnabledAt
+          ? ('ativo' as const)
+          : ('pendente' as const),
+        doisFatoresDesde: twoFactorEnabledAt,
+      }),
+    );
   }),
+
+  /**
+   * Cria outra conta master.
+   *
+   * A senha é gerada aqui e não escolhida por quem cria: ela vai passar pela
+   * mão de duas pessoas e por algum mensageiro, então só serve para o
+   * primeiro acesso. A conta nasce com a troca obrigatória e sem segunda
+   * etapa — e o layout e o `masterProcedure` não a deixam fazer nada antes
+   * das duas.
+   *
+   * Devolve a senha uma única vez. No banco só fica o hash.
+   */
+  createMaster: masterProcedure
+    .input(
+      z.object({
+        name: z.string().trim().min(2, 'Nome muito curto').max(80),
+        email: z.string().trim().email('E-mail inválido'),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const email = input.email.toLowerCase();
+
+      /* O unique do banco é (tenantId, email), e no Postgres nulo nunca é
+         igual a nulo: dois masters com o mesmo e-mail passariam por ele. O
+         login de master busca por e-mail e pegaria qualquer um dos dois. */
+      const jaExiste = await ctx.prisma.user.findFirst({
+        where: { email, tenantId: null },
+        select: { id: true },
+      });
+
+      if (jaExiste) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Já existe uma conta master com este e-mail.',
+        });
+      }
+
+      const senhaTemporaria = gerarSenhaTemporaria();
+
+      await ctx.prisma.user.create({
+        data: {
+          name: input.name,
+          email,
+          password: await hash(senhaTemporaria),
+          role: EUserRole.MASTER,
+          mustChangePassword: true,
+        },
+      });
+
+      const casa = masterHost();
+
+      return {
+        email,
+        senhaTemporaria,
+        /* Onde a pessoa entra. Sem domínio configurado (desenvolvimento) a
+           tela usa o próprio endereço em que está. */
+        endereco: casa ? `https://${casa}/auth/entrar` : null,
+      };
+    }),
 
   /* -------------------------------------------------------------- faturas */
 

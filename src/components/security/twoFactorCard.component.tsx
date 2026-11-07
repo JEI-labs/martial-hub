@@ -2,7 +2,14 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
-import { Check, Copy, Loader2, ShieldAlert, ShieldCheck } from 'lucide-react';
+import {
+  Check,
+  Copy,
+  Loader2,
+  RotateCw,
+  ShieldAlert,
+  ShieldCheck,
+} from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -31,13 +38,23 @@ export function TwoFactorCard() {
   const { toast } = useToast();
   const utils = api.useUtils();
 
-  const { data: status, isLoading } = api.security.status.useQuery();
+  const {
+    data: status,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isFetching,
+  } = api.security.status.useQuery();
   const [segredo, setSegredo] = useState<{
     qr: string;
     segredo: string;
   } | null>(null);
   const [codigo, setCodigo] = useState('');
   const [recuperacao, setRecuperacao] = useState<Array<string> | null>(null);
+  /* Campo separado do de cima: desligar e gerar novos códigos ficam na mesma
+     tela, e um só valor faria o código digitado para um disparar o outro. */
+  const [codigoParaDesligar, setCodigoParaDesligar] = useState('');
 
   const comecar = api.security.startTwoFactor.useMutation({
     onSuccess: (dados) => {
@@ -86,13 +103,68 @@ export function TwoFactorCard() {
       }),
   });
 
+  const desligar = api.security.disableTwoFactor.useMutation({
+    onSuccess: () => {
+      setCodigoParaDesligar('');
+      setRecuperacao(null);
+      utils.security.status.invalidate();
+      toast({
+        title: 'Verificação desligada',
+        description: 'A entrada volta a pedir só a senha.',
+      });
+    },
+    onError: (error) =>
+      toast({
+        title: 'Não deu para desligar',
+        description: error.message,
+        variant: 'destructive',
+      }),
+  });
+
+  /* Sem dado e sem carregar é erro. Antes isto também caía no esqueleto, e a
+     tela da segunda etapa — que para master é a única saída — ficava cinza
+     para sempre, sem dizer o que houve nem deixar tentar de novo. */
+  if (isError && !status) {
+    const sessaoVencida = error.data?.code === 'UNAUTHORIZED';
+
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Verificação em duas etapas</CardTitle>
+          <CardDescription>
+            {sessaoVencida
+              ? 'A sua sessão expirou. Saia e entre de novo para continuar.'
+              : 'Não deu para carregar a situação da sua conta. Confira a conexão e tente de novo.'}
+          </CardDescription>
+        </CardHeader>
+
+        {!sessaoVencida && (
+          <CardContent>
+            <Button
+              variant="outline"
+              disabled={isFetching}
+              onClick={() => void refetch()}
+            >
+              {isFetching ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <RotateCw className="mr-2 size-4" />
+              )}
+              Tentar de novo
+            </Button>
+          </CardContent>
+        )}
+      </Card>
+    );
+  }
+
   if (isLoading || !status) return <Skeleton className="h-64 w-full" />;
 
   const ativo = status.ativo;
 
   return (
     <Card>
-      <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+      <CardHeader className="flex-col gap-3 space-y-0 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <CardTitle className="flex flex-wrap items-center gap-2">
             Verificação em duas etapas
@@ -100,6 +172,8 @@ export function TwoFactorCard() {
               <Badge variant="success">Ativa</Badge>
             ) : status.obrigatorio ? (
               <Badge variant="destructive">Obrigatória</Badge>
+            ) : status.recomendado ? (
+              <Badge variant="alert">Recomendada</Badge>
             ) : (
               <Badge variant="secondary">Desligada</Badge>
             )}
@@ -108,7 +182,9 @@ export function TwoFactorCard() {
             Além da senha, o sistema pede um código de seis dígitos que muda a
             cada 30 segundos no seu celular.
             {status.obrigatorio &&
-              ' Para o seu acesso ela é obrigatória: é a conta que abre os dados de todo mundo.'}
+              ' Para conta de dono do sistema ela é obrigatória: é a conta que abre todas as academias de uma vez.'}
+            {status.recomendado &&
+              ' O seu acesso abre os dados de todo mundo — alunos, pagamentos, dinheiro. Se a sua senha vazar, é esta etapa que impede o estrago.'}
           </CardDescription>
         </div>
 
@@ -118,7 +194,9 @@ export function TwoFactorCard() {
               ? 'text-green-600'
               : status.obrigatorio
                 ? 'text-destructive-text'
-                : 'text-muted-foreground'
+                : status.recomendado
+                  ? 'text-alert'
+                  : 'text-muted-foreground'
           }
         >
           {ativo ? (
@@ -282,6 +360,56 @@ export function TwoFactorCard() {
             <p className="text-muted-foreground text-xs">
               Os códigos antigos param de valer assim que os novos aparecem.
             </p>
+
+            {/* Desligar existe porque a etapa é uma escolha — e para a conta
+                master ela não é, então o botão nem aparece. Pede o código
+                atual: se bastasse estar logado, uma sessão esquecida aberta
+                derrubaria justamente a proteção contra sessão esquecida. */}
+            {!status.obrigatorio && (
+              <div className="border-border mt-2 flex flex-col gap-2 border-t pt-4">
+                <Label htmlFor="codigo-desligar">
+                  Desligar a verificação em duas etapas
+                </Label>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    id="codigo-desligar"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="código atual"
+                    className="w-40 text-center tracking-widest"
+                    value={codigoParaDesligar}
+                    onChange={(event) =>
+                      setCodigoParaDesligar(
+                        event.target.value.replace(/\D/g, ''),
+                      )
+                    }
+                  />
+
+                  <Button
+                    variant="ghost"
+                    className="text-destructive-text"
+                    disabled={
+                      codigoParaDesligar.length !== 6 || desligar.isPending
+                    }
+                    onClick={() =>
+                      desligar.mutate({ codigo: codigoParaDesligar })
+                    }
+                  >
+                    {desligar.isPending && (
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                    )}
+                    Desligar
+                  </Button>
+                </div>
+
+                <p className="text-muted-foreground text-xs">
+                  {status.recomendado
+                    ? 'A sua conta abre os dados de todo mundo. Desligando, só a senha separa alguém de tudo isso.'
+                    : 'A entrada volta a pedir só a senha.'}
+                </p>
+              </div>
+            )}
           </div>
         )}
       </CardContent>

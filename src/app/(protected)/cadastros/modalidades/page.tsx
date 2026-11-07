@@ -65,21 +65,8 @@ export default function ModalitiesPage() {
       <BreadcrumbUpdater items={breadcrumbItems} />
 
       <main className="flex flex-col gap-4">
-        <PageIntro
-          icon={Dumbbell}
-          title="O que é uma modalidade?"
-          example={
-            <>
-              <strong className="text-foreground font-medium">Muay Thai</strong>
-              , <strong className="text-foreground font-medium">Boxe</strong> ou{' '}
-              <strong className="text-foreground font-medium">Jiu-Jitsu</strong>
-              . A ordem aqui é a ordem em que elas aparecem no resto do sistema.
-            </>
-          }
-        >
-          É o que a academia ensina. Desativar tira a modalidade das escolhas
-          novas sem apagar o que já existe; a academia precisa de pelo menos uma
-          ativa.
+        <PageIntro icon={Dumbbell} title="Modalidades">
+          O que a academia ensina, na ordem em que aparece no sistema.
         </PageIntro>
 
         <div className="flex items-center justify-between gap-4">

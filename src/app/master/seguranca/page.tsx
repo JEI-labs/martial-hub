@@ -9,8 +9,8 @@ export default function MasterSeguranca() {
       <div>
         <h1 className="text-2xl font-semibold">Segurança</h1>
         <p className="text-muted-foreground text-sm">
-          A sua conta abre todas as academias do sistema. A segunda etapa é o
-          que separa isso de uma senha vazada.
+          A sua conta abre todas as academias do sistema. A segunda etapa não é
+          obrigatória, mas é ela que separa isso de uma senha vazada.
         </p>
       </div>
 

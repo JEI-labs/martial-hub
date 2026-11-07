@@ -23,6 +23,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { useIsMobile } from '@/hooks/use-mobile';
 import {
   ChartContainer,
   ChartLegend,
@@ -43,6 +44,14 @@ type Breakdowns = Overview['breakdowns'];
 const compactBRL = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
   currency: 'BRL',
+  notation: 'compact',
+  maximumFractionDigits: 1,
+});
+
+/** O mesmo número sem o "R$": no celular o símbolo repetido em cada linha
+ *  custa mais largura do que informa, e o título do cartão já diz que é
+ *  dinheiro. */
+const compactoSemMoeda = new Intl.NumberFormat('pt-BR', {
   notation: 'compact',
   maximumFractionDigits: 1,
 });
@@ -70,6 +79,38 @@ const STATUS_COLOR: Record<string, string> = {
   'ATRASADO': 'hsl(0 72% 51%)',
   'SEM MATRÍCULA': 'hsl(240 5% 65%)',
 };
+
+/**
+ * O quanto os eixos podem ocupar.
+ *
+ * No celular a largura do cartão é a do aparelho: os 62px reservados para o
+ * eixo de valores comiam um sexto do gráfico, e os rótulos de mês vinham
+ * todos, encavalados até a borda. Aqui sobra menos espaço para a régua e
+ * entram menos rótulos — o resto o tooltip conta.
+ */
+function useEixos() {
+  const mobile = useIsMobile();
+
+  return {
+    /** Eixo de dinheiro, com o valor abreviado. */
+    valor: mobile ? 46 : 62,
+    /** Como o eixo escreve um valor: sem "R$" no celular. */
+    dinheiro: (v: number) =>
+      mobile ? compactoSemMoeda.format(v) : compactBRL.format(v),
+    /** Eixo de contagem, que cabe em dois ou três dígitos. */
+    contagem: mobile ? 26 : 32,
+    /** Eixo de nomes das barras deitadas, que encurta mas não some. */
+    cat: (largura: number) => (mobile ? Math.min(largura, 72) : largura),
+    /** Distância mínima entre rótulos: maior no celular, logo menos rótulos. */
+    gap: mobile ? 48 : 16,
+    margem: mobile
+      ? { left: 0, right: 4, top: 8 }
+      : { left: 4, right: 8, top: 8 },
+    margemBarra: mobile ? { left: 0, right: 8 } : { left: 8, right: 16 },
+    /** Fonte menor nos rótulos do eixo, aplicada pelo contêiner. */
+    classe: mobile ? '[&_.recharts-cartesian-axis-tick_text]:text-[10px]' : '',
+  };
+}
 
 function ChartCard({
   title,
@@ -117,6 +158,7 @@ function scaleWord(series: Series): 'dia' | 'mês' {
 }
 
 export function MrrChart({ series }: { series: Series }) {
+  const eixos = useEixos();
   const config = {
     mrr: { label: 'MRR', color: 'hsl(var(--chart-1))' },
   } satisfies ChartConfig;
@@ -126,21 +168,24 @@ export function MrrChart({ series }: { series: Series }) {
       title="Receita recorrente (MRR)"
       description={`Soma das mensalidades vigentes ao fim de cada ${scaleWord(series)}`}
     >
-      <ChartContainer config={config} className="h-[220px] w-full">
-        <AreaChart data={series} margin={{ left: 4, right: 8, top: 8 }}>
+      <ChartContainer
+        config={config}
+        className={`h-[220px] w-full ${eixos.classe}`}
+      >
+        <AreaChart data={series} margin={eixos.margem}>
           <CartesianGrid vertical={false} strokeDasharray="3 3" />
           <XAxis
             dataKey="label"
             tickLine={false}
             axisLine={false}
             tickMargin={8}
-            minTickGap={16}
+            minTickGap={eixos.gap}
           />
           <YAxis
             tickLine={false}
             axisLine={false}
-            width={62}
-            tickFormatter={(value: number) => compactBRL.format(value)}
+            width={eixos.valor}
+            tickFormatter={(value: number) => eixos.dinheiro(value)}
           />
           <ChartTooltip
             content={
@@ -165,6 +210,7 @@ export function MrrChart({ series }: { series: Series }) {
 }
 
 export function CashflowChart({ series }: { series: Series }) {
+  const eixos = useEixos();
   const config = {
     income: { label: 'Entradas', color: 'hsl(142 71% 45%)' },
     outflow: { label: 'Saídas', color: 'hsl(0 72% 51%)' },
@@ -210,27 +256,24 @@ export function CashflowChart({ series }: { series: Series }) {
       {isEmpty ? (
         <NoData text="Nenhum lançamento pago no período." />
       ) : (
-        <ChartContainer config={config} className="h-[220px] w-full">
-          <BarChart
-            data={data}
-            stackOffset="sign"
-            margin={{ left: 4, right: 8, top: 8 }}
-          >
+        <ChartContainer
+          config={config}
+          className={`h-[220px] w-full ${eixos.classe}`}
+        >
+          <BarChart data={data} stackOffset="sign" margin={eixos.margem}>
             <CartesianGrid vertical={false} strokeDasharray="3 3" />
             <XAxis
               dataKey="label"
               tickLine={false}
               axisLine={false}
               tickMargin={8}
-              minTickGap={16}
+              minTickGap={eixos.gap}
             />
             <YAxis
               tickLine={false}
               axisLine={false}
-              width={62}
-              tickFormatter={(value: number) =>
-                compactBRL.format(Math.abs(value))
-              }
+              width={eixos.valor}
+              tickFormatter={(value: number) => eixos.dinheiro(Math.abs(value))}
             />
             <ReferenceLine y={0} stroke="hsl(var(--border))" />
             <ChartTooltip
@@ -265,6 +308,7 @@ export function CashflowChart({ series }: { series: Series }) {
 }
 
 export function StudentsFlowChart({ series }: { series: Series }) {
+  const eixos = useEixos();
   const config = {
     newStudents: { label: 'Entradas', color: 'hsl(var(--chart-2))' },
     churned: { label: 'Matrículas encerradas', color: 'hsl(var(--chart-5))' },
@@ -275,20 +319,23 @@ export function StudentsFlowChart({ series }: { series: Series }) {
       title="Entradas × saídas"
       description={`Alunos cadastrados e matrículas encerradas por ${scaleWord(series)}`}
     >
-      <ChartContainer config={config} className="h-[220px] w-full">
-        <BarChart data={series} margin={{ left: 4, right: 8, top: 8 }}>
+      <ChartContainer
+        config={config}
+        className={`h-[220px] w-full ${eixos.classe}`}
+      >
+        <BarChart data={series} margin={eixos.margem}>
           <CartesianGrid vertical={false} strokeDasharray="3 3" />
           <XAxis
             dataKey="label"
             tickLine={false}
             axisLine={false}
             tickMargin={8}
-            minTickGap={16}
+            minTickGap={eixos.gap}
           />
           <YAxis
             tickLine={false}
             axisLine={false}
-            width={32}
+            width={eixos.contagem}
             allowDecimals={false}
           />
           <ChartTooltip content={<ChartTooltipContent />} />
@@ -318,6 +365,7 @@ export function StatusChart({
 }: {
   byStatus: Breakdowns['byStatus'];
 }) {
+  const eixos = useEixos();
   const data = byStatus.filter((item) => item.students > 0);
   const config = Object.fromEntries(
     byStatus.map((item) => [
@@ -334,7 +382,10 @@ export function StatusChart({
       {data.length === 0 ? (
         <NoData text="Nenhum aluno matriculado." />
       ) : (
-        <ChartContainer config={config} className="h-[220px] w-full">
+        <ChartContainer
+          config={config}
+          className={`h-[220px] w-full ${eixos.classe}`}
+        >
           <PieChart>
             <ChartTooltip content={<ChartTooltipContent nameKey="status" />} />
             <Pie
@@ -363,6 +414,7 @@ export function StatusChart({
 }
 
 export function PlanChart({ byPlan }: { byPlan: Breakdowns['byPlan'] }) {
+  const eixos = useEixos();
   const config = {
     mrr: { label: 'MRR', color: 'hsl(var(--chart-1))' },
   } satisfies ChartConfig;
@@ -375,25 +427,24 @@ export function PlanChart({ byPlan }: { byPlan: Breakdowns['byPlan'] }) {
       {byPlan.length === 0 ? (
         <NoData text="Nenhuma matrícula vigente." />
       ) : (
-        <ChartContainer config={config} className="h-[220px] w-full">
-          <BarChart
-            data={byPlan}
-            layout="vertical"
-            margin={{ left: 8, right: 16 }}
-          >
+        <ChartContainer
+          config={config}
+          className={`h-[220px] w-full ${eixos.classe}`}
+        >
+          <BarChart data={byPlan} layout="vertical" margin={eixos.margemBarra}>
             <CartesianGrid horizontal={false} strokeDasharray="3 3" />
             <XAxis
               type="number"
               tickLine={false}
               axisLine={false}
-              tickFormatter={(value: number) => compactBRL.format(value)}
+              tickFormatter={(value: number) => eixos.dinheiro(value)}
             />
             <YAxis
               type="category"
               dataKey="name"
               tickLine={false}
               axisLine={false}
-              width={96}
+              width={eixos.cat(96)}
             />
             <ChartTooltip
               content={
@@ -421,6 +472,7 @@ export function PlanChart({ byPlan }: { byPlan: Breakdowns['byPlan'] }) {
 }
 
 export function AgingChart({ aging }: { aging: Breakdowns['aging'] }) {
+  const eixos = useEixos();
   const config = {
     amount: { label: 'Em aberto', color: 'hsl(0 72% 51%)' },
   } satisfies ChartConfig;
@@ -435,8 +487,11 @@ export function AgingChart({ aging }: { aging: Breakdowns['aging'] }) {
       {total === 0 ? (
         <NoData text="Nenhuma parcela vencida. " />
       ) : (
-        <ChartContainer config={config} className="h-[220px] w-full">
-          <BarChart data={aging} margin={{ left: 4, right: 8, top: 8 }}>
+        <ChartContainer
+          config={config}
+          className={`h-[220px] w-full ${eixos.classe}`}
+        >
+          <BarChart data={aging} margin={eixos.margem}>
             <CartesianGrid vertical={false} strokeDasharray="3 3" />
             <XAxis
               dataKey="label"
@@ -447,8 +502,8 @@ export function AgingChart({ aging }: { aging: Breakdowns['aging'] }) {
             <YAxis
               tickLine={false}
               axisLine={false}
-              width={62}
-              tickFormatter={(value: number) => compactBRL.format(value)}
+              width={eixos.valor}
+              tickFormatter={(value: number) => eixos.dinheiro(value)}
             />
             <ChartTooltip
               content={
@@ -479,6 +534,7 @@ export function ExpensesByCategoryChart({
 }: {
   expenses: Breakdowns['expensesByCategory'];
 }) {
+  const eixos = useEixos();
   const config = {
     amount: { label: 'Despesas', color: 'hsl(var(--chart-5))' },
   } satisfies ChartConfig;
@@ -493,25 +549,24 @@ export function ExpensesByCategoryChart({
       {data.length === 0 ? (
         <NoData text="Nenhuma despesa paga neste período." />
       ) : (
-        <ChartContainer config={config} className="h-[220px] w-full">
-          <BarChart
-            data={data}
-            layout="vertical"
-            margin={{ left: 8, right: 16 }}
-          >
+        <ChartContainer
+          config={config}
+          className={`h-[220px] w-full ${eixos.classe}`}
+        >
+          <BarChart data={data} layout="vertical" margin={eixos.margemBarra}>
             <CartesianGrid horizontal={false} strokeDasharray="3 3" />
             <XAxis
               type="number"
               tickLine={false}
               axisLine={false}
-              tickFormatter={(value: number) => compactBRL.format(value)}
+              tickFormatter={(value: number) => eixos.dinheiro(value)}
             />
             <YAxis
               type="category"
               dataKey="name"
               tickLine={false}
               axisLine={false}
-              width={110}
+              width={eixos.cat(110)}
             />
             <ChartTooltip
               content={
@@ -539,6 +594,7 @@ export function GraduationChart({
 }: {
   byGraduation: Breakdowns['byGraduation'];
 }) {
+  const eixos = useEixos();
   const config = {
     students: { label: 'Alunos', color: 'hsl(var(--chart-3))' },
   } satisfies ChartConfig;
@@ -568,8 +624,11 @@ export function GraduationChart({
       {data.length === 0 ? (
         <NoData text="Nenhum aluno cadastrado." />
       ) : (
-        <ChartContainer config={config} className="h-[220px] w-full">
-          <BarChart data={data} margin={{ left: 4, right: 8, top: 8 }}>
+        <ChartContainer
+          config={config}
+          className={`h-[220px] w-full ${eixos.classe}`}
+        >
+          <BarChart data={data} margin={eixos.margem}>
             <defs>
               {data.map((item) => (
                 <linearGradient
@@ -613,7 +672,7 @@ export function GraduationChart({
             <YAxis
               tickLine={false}
               axisLine={false}
-              width={32}
+              width={eixos.contagem}
               allowDecimals={false}
             />
             <ChartTooltip
@@ -653,6 +712,7 @@ export function PaymentMethodChart({
 }: {
   incomeByMethod: Breakdowns['incomeByMethod'];
 }) {
+  const eixos = useEixos();
   const config = {
     amount: { label: 'Recebido', color: 'hsl(var(--chart-4))' },
   } satisfies ChartConfig;
@@ -670,25 +730,24 @@ export function PaymentMethodChart({
       {data.length === 0 ? (
         <NoData text="Nenhuma entrada paga neste período." />
       ) : (
-        <ChartContainer config={config} className="h-[220px] w-full">
-          <BarChart
-            data={data}
-            layout="vertical"
-            margin={{ left: 8, right: 16 }}
-          >
+        <ChartContainer
+          config={config}
+          className={`h-[220px] w-full ${eixos.classe}`}
+        >
+          <BarChart data={data} layout="vertical" margin={eixos.margemBarra}>
             <CartesianGrid horizontal={false} strokeDasharray="3 3" />
             <XAxis
               type="number"
               tickLine={false}
               axisLine={false}
-              tickFormatter={(value: number) => compactBRL.format(value)}
+              tickFormatter={(value: number) => eixos.dinheiro(value)}
             />
             <YAxis
               type="category"
               dataKey="label"
               tickLine={false}
               axisLine={false}
-              width={110}
+              width={eixos.cat(110)}
             />
             <ChartTooltip
               content={
