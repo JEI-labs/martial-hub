@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { PLAN_BILLING_LABEL } from '@/common/constants/planBilling';
+import { PlanOptionLabel } from '@/components/plans/planOptionLabel.component';
 import { useResetOnChange } from '@/hooks/useResetOnChange/useResetOnChange.hook';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/trpc/react';
@@ -30,8 +30,17 @@ import { installmentCount, splitIntoInstallments } from '@/utils/planUtils';
 import {
   comDesconto,
   descontosDasMatriculas,
+  vigentes,
   precoNaModalidade,
 } from '@/common/utils/pricing';
+
+/** Uma matrícula ativa do aluno, para a prévia e para filtrar modalidades. */
+export interface MatriculaDoAluno {
+  id: string;
+  modality: { id: string };
+  discountPercent: number;
+  endDate: Date | string;
+}
 
 /** A matrícula cujo plano vai trocar. */
 export interface EnrollmentToChange {
@@ -51,8 +60,12 @@ interface ChangePlanDialogProps {
    * modalidade que ele ainda não faz.
    */
   enrollment?: EnrollmentToChange | null;
-  /** Modalidades em que o aluno já está matriculado: não são oferecidas. */
-  enrolledModalityIds?: Array<string>;
+  /**
+   * As matrículas ativas do aluno. As modalidades delas não são oferecidas
+   * para matrícula nova, e as vigentes decidem o desconto da 2ª modalidade
+   * na prévia — com a mesma conta do servidor.
+   */
+  activeEnrollments?: Array<MatriculaDoAluno>;
   open: boolean;
   onOpenChange: (_open: boolean) => void;
   onChanged?: () => void;
@@ -69,7 +82,7 @@ export function ChangePlanDialog({
   studentId,
   studentName,
   enrollment,
-  enrolledModalityIds = [],
+  activeEnrollments = [],
   open,
   onOpenChange,
   onChanged,
@@ -80,7 +93,8 @@ export function ChangePlanDialog({
   const [modalityId, setModalityId] = useState('');
 
   const { data: plansData, isLoading } = api.plans.getAll.useQuery(
-    { page: 1, limit: 100 },
+    /* Só os ativos: plano desativado não aceita matrícula nova nem troca. */
+    { page: 1, limit: 100, apenasAtivos: true },
     { enabled: open },
   );
 
@@ -90,9 +104,17 @@ export function ChangePlanDialog({
   const currentPlanId = enrollment?.planId ?? null;
   const currentPlanName = enrollment?.planName ?? null;
 
-  const { data: modalidades } = api.modalities.list.useQuery(undefined, {
+  const modalidadesApi = api.modalities.list.useQuery(undefined, {
     enabled: open && isEnrolling,
   });
+  const modalidades = modalidadesApi.data;
+  /* Na matrícula, as modalidades decidem o que dá para escolher: enquanto
+     não chegam (ou se a consulta falha), "já está matriculado em todas"
+     seria mentira. */
+  const carregandoModalidades = isEnrolling && modalidadesApi.isLoading;
+  const erroModalidades =
+    isEnrolling && modalidadesApi.isError && !modalidadesApi.data;
+  const enrolledModalityIds = activeEnrollments.map((e) => e.modality.id);
   const modalidadesLivres = (modalidades ?? []).filter(
     (m) => m.isActive && !enrolledModalityIds.includes(m.id),
   );
@@ -120,22 +142,23 @@ export function ChangePlanDialog({
   });
   const descontoDaAcademia = pricing?.multiModalityDiscount ?? 0;
 
-  /* A mesma conta do servidor. Na troca, a matrícula mantém o desconto se
-     já tinha; matrícula nova ganha desconto se o aluno já faz outra. */
+  /* A mesma conta do servidor (`descontosDasMatriculas`): desconto se outra
+     matrícula vigente do aluno paga cheio — na troca, sem contar a que está
+     sendo trocada. */
   const modalidadeDoPreco = enrollment?.modality.id ?? modalidadeEscolhida?.id;
   const precoCheio =
     selected && modalidadeDoPreco
       ? precoNaModalidade(selected, modalidadeDoPreco)
       : Number(selected?.price ?? 0);
-  const percent = enrollment
-    ? enrollment.discountPercent > 0
-      ? descontoDaAcademia
-      : 0
-    : (descontosDasMatriculas(
-        [precoCheio],
-        enrolledModalityIds.length,
-        descontoDaAcademia,
-      )[0] ?? 0);
+  const outras = vigentes(activeEnrollments).filter(
+    (e) => e.id !== enrollment?.id,
+  );
+  const percent =
+    descontosDasMatriculas(
+      [{ preco: precoCheio, duracao: selected?.duration ?? 1 }],
+      outras,
+      descontoDaAcademia,
+    )[0] ?? 0;
   const valor = comDesconto(precoCheio, percent);
 
   const amounts = selected
@@ -214,8 +237,20 @@ export function ChangePlanDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {isLoading ? (
+        {isLoading || carregandoModalidades ? (
           <Skeleton className="h-10 w-full" />
+        ) : erroModalidades ? (
+          <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-2 text-sm">
+            <span>Não deu para carregar as modalidades da academia.</span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={modalidadesApi.isFetching}
+              onClick={() => void modalidadesApi.refetch()}
+            >
+              Tentar de novo
+            </Button>
+          </div>
         ) : (
           <div className="flex flex-col gap-4">
             {isEnrolling && (
@@ -255,15 +290,14 @@ export function ChangePlanDialog({
                 <SelectContent>
                   {options.map((plan) => (
                     <SelectItem key={plan.id} value={plan.id}>
-                      {plan.name} ·{' '}
-                      {maskBRL(
-                        modalidadeDoPreco
-                          ? precoNaModalidade(plan, modalidadeDoPreco)
-                          : Number(plan.price),
-                        true,
-                      )}{' '}
-                      · {plan.duration} {plan.duration === 1 ? 'mês' : 'meses'}{' '}
-                      · {PLAN_BILLING_LABEL[plan.billing]}
+                      <PlanOptionLabel
+                        plan={plan}
+                        preco={
+                          modalidadeDoPreco
+                            ? precoNaModalidade(plan, modalidadeDoPreco)
+                            : undefined
+                        }
+                      />
                     </SelectItem>
                   ))}
                 </SelectContent>

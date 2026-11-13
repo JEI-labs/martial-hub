@@ -1,8 +1,10 @@
 'use client';
 
+import { useFaixasDisponiveis } from '@/components/graduationBadge/useFaixasDisponiveis';
 import { FormModal } from '@/components/formModal/formModal.component';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { TRPCClientError } from '@trpc/client';
 import { useForm, useWatch } from 'react-hook-form';
 import { Form } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
@@ -33,16 +35,19 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
 }) => {
   const { toast } = useToast();
 
-  const plansApi = api.plans.getAll.useQuery({ page: 1, limit: 100 });
+  /* Só os ativos: plano desativado não aceita matrícula nova. */
+  const plansApi = api.plans.getAll.useQuery({
+    page: 1,
+    limit: 100,
+    apenasAtivos: true,
+  });
   const { data: pricing } = api.plans.getPricingSettings.useQuery();
   const { data: plansData } = plansApi;
   const defaultPlanId = plansData?.data.find((plan) => plan.isDefault)?.id;
 
-  /* As modalidades ativas, cada uma com o seu catálogo de faixas: a faixa
+  /* O catálogo de faixas de cada modalidade ativa que tem faixa: a faixa
      com que o aluno chega é escolhida na linha da modalidade. */
-  const { data: modalidades } = api.graduations.list.useQuery(undefined, {
-    staleTime: 5 * 60 * 1000,
-  });
+  const { modalidades: comFaixas } = useFaixasDisponiveis();
 
   const createUser = api.student.create.useMutation();
   const updateUser = api.student.updateAvatar.useMutation();
@@ -55,8 +60,18 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
   });
 
   /* As modalidades ativas, na ordem da academia: cada uma pode virar uma
-     matrícula. Vêm da lista de graduações, que já traz só as ativas. */
-  const modalidadesAtivas = modalidades ?? [];
+     matrícula, tenha faixa ou não (boxe também se matricula), e leva junto
+     o catálogo de faixas dela, quando tem. */
+  const modalidadesApi = api.modalities.list.useQuery(undefined, {
+    staleTime: 60_000,
+  });
+  const modalidadesAtivas = (modalidadesApi.data ?? [])
+    .filter((m) => m.isActive)
+    .map(({ id, name }) => ({
+      id,
+      name,
+      graduations: comFaixas.find((m) => m.id === id)?.graduations ?? [],
+    }));
   const enrollmentsError =
     form.formState.errors.enrollments?.message ??
     form.formState.errors.enrollments?.root?.message ??
@@ -95,9 +110,15 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
         variant: 'default',
       });
     } catch (error) {
+      /* A mensagem do servidor diz o que houve ("Email já cadastrado",
+         "Graduação não encontrada nesta academia"); o genérico fica para o
+         erro que não tem uma. */
       toast({
         title: 'Erro',
-        description: 'Não foi possível criar o aluno.',
+        description:
+          error instanceof TRPCClientError && error.message
+            ? error.message
+            : 'Não foi possível criar o aluno.',
         variant: 'destructive',
       });
       console.error(error);
@@ -190,6 +211,9 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
             control={form.control}
             setValue={form.setValue}
             modalidades={modalidadesAtivas}
+            carregando={modalidadesApi.isLoading}
+            erro={modalidadesApi.isError && !modalidadesApi.data}
+            tentarDeNovo={() => void modalidadesApi.refetch()}
             planos={(plansData?.data ?? []).map((plan) => ({
               ...plan,
               price: Number(plan.price),

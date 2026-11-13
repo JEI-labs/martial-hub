@@ -10,6 +10,7 @@ import {
   type IModalityPriceInput,
 } from '@/server/validations/plans';
 import { Prisma } from '@prisma/client';
+import { descontoDaAcademia } from '@/server/enrollments';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
@@ -25,9 +26,12 @@ const modalityPricesInclude = {
 } satisfies Prisma.PlanInclude;
 
 /**
- * Regrava os valores por modalidade do plano: os que vieram com valor ficam,
- * o resto volta ao preço padrão. Confere que as modalidades são desta
- * academia — o id chega do navegador.
+ * Regrava os valores por modalidade do plano, só das modalidades que vieram
+ * na lista: com valor, ficam; vazias, voltam ao preço padrão. As que não
+ * vieram não mudam — o formulário não mostra, por exemplo, modalidade
+ * desativada sem valor, e apagar tudo que não veio levava junto o valor
+ * dela. Confere que as modalidades são desta academia: o id chega do
+ * navegador.
  */
 async function gravarPrecosPorModalidade(
   tx: Prisma.TransactionClient,
@@ -35,29 +39,29 @@ async function gravarPrecosPorModalidade(
   planId: string,
   lista: Array<IModalityPriceInput>,
 ) {
+  if (lista.length === 0) return;
+
+  const ids = lista.map((item) => item.modalityId);
+  const daAcademia = await tx.modality.count({
+    where: { tenantId, id: { in: ids } },
+  });
+  if (daAcademia !== ids.length) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Modalidade não encontrada nesta academia.',
+    });
+  }
+
   const comValor = lista
     .map((item) => ({
       modalityId: item.modalityId,
-      price: parseFloat(item.price || '0') / 100,
+      price: Number(item.price || '0') / 100,
     }))
     .filter((item) => item.price > 0);
 
-  if (comValor.length > 0) {
-    const daAcademia = await tx.modality.count({
-      where: {
-        tenantId,
-        id: { in: comValor.map((item) => item.modalityId) },
-      },
-    });
-    if (daAcademia !== new Set(comValor.map((i) => i.modalityId)).size) {
-      throw new TRPCError({
-        code: 'BAD_REQUEST',
-        message: 'Modalidade não encontrada nesta academia.',
-      });
-    }
-  }
-
-  await tx.planModalityPrice.deleteMany({ where: { planId } });
+  await tx.planModalityPrice.deleteMany({
+    where: { planId, modalityId: { in: ids } },
+  });
   await tx.planModalityPrice.createMany({
     data: comValor.map((item) => ({ ...item, planId })),
   });
@@ -132,6 +136,8 @@ export const plansRouter = createTRPCRouter({
         page: z.number().default(1),
         limit: z.number().default(10),
         search: z.string().optional(),
+        /** Para as escolhas de matrícula nova e troca de plano. */
+        apenasAtivos: z.boolean().optional(),
       }),
     )
     .query(async ({ ctx, input }) => {
@@ -148,6 +154,7 @@ export const plansRouter = createTRPCRouter({
          planos de todas as academias do sistema. */
       const where: Prisma.PlanWhereInput = {
         tenantId,
+        ...(input.apenasAtivos ? { isActive: true } : {}),
         ...(input.search
           ? {
               name: {
@@ -199,22 +206,28 @@ export const plansRouter = createTRPCRouter({
         });
       }
 
-      /* A matrícula aponta para o plano em cascata: apagar um plano em uso
-         apagava junto as matrículas de quem está nele, ativas e encerradas. */
+      /* A contagem dá a mensagem com o número; quem garante é o FK da
+         matrícula (NO ACTION), que recusa no banco o que passar daqui —
+         uma matrícula feita entre a contagem e o delete, por exemplo. */
       const emUso = await ctx.prisma.enrollment.count({
         where: { planId: input.id, plan: { tenantId } },
       });
 
-      if (emUso > 0) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: `Este plano está em ${emUso} ${emUso === 1 ? 'matrícula' : 'matrículas'}, contando as encerradas, e não pode ser apagado.`,
-        });
-      }
+      if (emUso > 0) throw planoEmUso(emUso);
 
-      await ctx.prisma.plan.delete({
-        where: { id: input.id, tenantId },
-      });
+      try {
+        await ctx.prisma.plan.delete({
+          where: { id: input.id, tenantId },
+        });
+      } catch (err) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2003'
+        ) {
+          throw planoEmUso();
+        }
+        throw err;
+      }
 
       return { ok: true };
     }),
@@ -234,6 +247,10 @@ export const plansRouter = createTRPCRouter({
 
       const { id, duration, price, modalityPrices, ...rest } = input;
 
+      /* O padrão vem escolhido na matrícula: plano desativado não pode ser
+         ele. Desativar o padrão tira a marca; a academia escolhe outro. */
+      if (rest.isActive === false) rest.isDefault = false;
+
       const updatedPlan = await ctx.prisma.$transaction(async (tx) => {
         if (rest.isDefault) {
           await tx.plan.updateMany({
@@ -252,6 +269,13 @@ export const plansRouter = createTRPCRouter({
             duration: Number(duration),
           },
         });
+
+        if (plan.isDefault && !plan.isActive) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Um plano desativado não pode ser o padrão.',
+          });
+        }
 
         if (modalityPrices) {
           await gravarPrecosPorModalidade(
@@ -300,13 +324,9 @@ export const plansRouter = createTRPCRouter({
     }),
 
   /** O desconto da academia da 2ª modalidade em diante. */
-  getPricingSettings: protectedProcedure.query(async ({ ctx }) => {
-    const tenant = await ctx.prisma.tenant.findUnique({
-      where: { id: ctx.tenantId },
-      select: { multiModalityDiscount: true },
-    });
-    return { multiModalityDiscount: tenant?.multiModalityDiscount ?? 0 };
-  }),
+  getPricingSettings: protectedProcedure.query(async ({ ctx }) => ({
+    multiModalityDiscount: await descontoDaAcademia(ctx.prisma, ctx.tenantId),
+  })),
 
   /**
    * Vale para as matrículas feitas daqui em diante. As que já existem
@@ -322,3 +342,14 @@ export const plansRouter = createTRPCRouter({
       return { ok: true };
     }),
 });
+
+/** Plano com matrícula não sai: levaria o histórico de quem está nele. */
+const planoEmUso = (matriculas?: number) =>
+  new TRPCError({
+    code: 'BAD_REQUEST',
+    message: `Este plano está em ${
+      matriculas === undefined
+        ? 'matrículas de alunos'
+        : `${matriculas} ${matriculas === 1 ? 'matrícula' : 'matrículas'}`
+    }, contando as encerradas, e não pode ser apagado. Desative-o para tirá-lo das matrículas novas.`,
+  });

@@ -14,7 +14,7 @@ const { studentRouter } = await import('./students');
 const { plansRouter } = await import('./plans');
 const { modalitiesRouter } = await import('./modalities');
 const { dashboardRouter } = await import('./dashboard');
-const { comDesconto, descontosDasMatriculas, precoNaModalidade } =
+const { comDesconto, descontosDasMatriculas, precoNaModalidade, vigentes } =
   await import('@/common/utils/pricing');
 
 const createCaller = createCallerFactory(
@@ -143,11 +143,45 @@ describe('a conta do preço', () => {
     expect(comDesconto(150, 0)).toBe(150);
   });
 
-  it('aluno novo paga cheio na mais cara; quem já faz outra ganha em todas', () => {
-    expect(descontosDasMatriculas([150, 200, 100], 0, 20)).toEqual([20, 0, 20]);
-    expect(descontosDasMatriculas([150], 0, 20)).toEqual([0]);
-    expect(descontosDasMatriculas([150], 1, 20)).toEqual([20]);
-    expect(descontosDasMatriculas([150, 200], 0, 0)).toEqual([0, 0]);
+  it('aluno novo paga cheio na mais cara; quem já tem uma cheia ganha em todas', () => {
+    const mensal = (preco: number) => ({ preco, duracao: 1 });
+    const cheia = { discountPercent: 0 };
+    const comDesc = { discountPercent: 20 };
+
+    expect(
+      descontosDasMatriculas([mensal(150), mensal(200), mensal(100)], [], 20),
+    ).toEqual([20, 0, 20]);
+    expect(descontosDasMatriculas([mensal(150)], [], 20)).toEqual([0]);
+    expect(descontosDasMatriculas([mensal(150)], [cheia], 20)).toEqual([20]);
+    expect(descontosDasMatriculas([mensal(150), mensal(200)], [], 0)).toEqual([
+      0, 0,
+    ]);
+    /* Ninguém pagando cheio ao lado (a cheia foi cancelada): esta paga. */
+    expect(descontosDasMatriculas([mensal(150)], [comDesc], 20)).toEqual([0]);
+  });
+
+  it('a mais cara é pelo valor mensal, não pelo do período', () => {
+    /* Anual de R$ 1.200 = R$ 100/mês; mensal de R$ 150 = R$ 150/mês. */
+    expect(
+      descontosDasMatriculas(
+        [
+          { preco: 1200, duracao: 12 },
+          { preco: 150, duracao: 1 },
+        ],
+        [],
+        20,
+      ),
+    ).toEqual([20, 0]);
+  });
+
+  it('vencida não é vigente, mesmo marcada como ativa', () => {
+    const agora = new Date('2026-11-13T12:00:00Z');
+    const lista = [
+      { discountPercent: 0, endDate: new Date('2026-08-31'), isActive: true },
+      { discountPercent: 0, endDate: new Date('2027-01-31'), isActive: true },
+      { discountPercent: 0, endDate: new Date('2027-01-31'), isActive: false },
+    ];
+    expect(vigentes(lista, agora)).toEqual([lista[1]]);
   });
 });
 
@@ -296,15 +330,16 @@ describe('desconto a partir da 2ª modalidade', () => {
     ]);
   });
 
-  it('só o dono configura o desconto, entre 0 e 100', async () => {
+  it('só o dono configura o desconto, entre 0 e 99', async () => {
     await expect(
       a.como(EUserRole.STAFF).plans.updatePricingSettings({
         multiModalityDiscount: 50,
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
 
+    /* 100% gerava parcelas de R$ 0. */
     await expect(
-      a.caller.plans.updatePricingSettings({ multiModalityDiscount: 101 }),
+      a.caller.plans.updatePricingSettings({ multiModalityDiscount: 100 }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 
     expect(await a.como(EUserRole.STAFF).plans.getPricingSettings()).toEqual({
@@ -313,7 +348,262 @@ describe('desconto a partir da 2ª modalidade', () => {
   });
 });
 
+describe('sempre há uma modalidade pagando cheio', () => {
+  beforeEach(async () => {
+    await a.caller.plans.updatePricingSettings({ multiModalityDiscount: 20 });
+  });
+
+  it('cancelada a que pagava cheio, a próxima matrícula e a troca pagam cheio', async () => {
+    const { data } = await cadastrar(a, [
+      { modalityId: a.muayThai.id, planId: a.mensal.id },
+      { modalityId: a.jiuJitsu.id, planId: a.mensal.id },
+    ]);
+    const [mt, jj] = await matriculasDe(data.id);
+    expect([mt?.discountPercent, jj?.discountPercent]).toEqual([20, 0]);
+
+    /* Sai o jiu-jitsu, que pagava cheio: sobra o muay thai com desconto. */
+    await a.caller.student.cancelEnrollment({ enrollmentId: jj!.id });
+
+    /* O boxe entra sem ninguém pagando cheio ao lado: paga cheio. */
+    await a.caller.student.addEnrollment({
+      studentId: data.id,
+      modalityId: a.boxe.id,
+      planId: a.mensal.id,
+    });
+
+    const depois = await matriculasDe(data.id);
+    expect(
+      depois.map((m) => [m.modality.name, m.discountPercent]).sort(),
+    ).toEqual([
+      ['Boxe', 0],
+      ['Muay Thai', 20],
+    ]);
+  });
+
+  it('trocar o plano da única que sobrou com desconto a deixa cheia', async () => {
+    const { data } = await cadastrar(a, [
+      { modalityId: a.muayThai.id, planId: a.mensal.id },
+      { modalityId: a.jiuJitsu.id, planId: a.mensal.id },
+    ]);
+    const [mt, jj] = await matriculasDe(data.id);
+    await a.caller.student.cancelEnrollment({ enrollmentId: jj!.id });
+    const { data: trimestral } = await a.caller.plans.create({
+      name: 'Trimestral',
+      price: '42000',
+      duration: '3',
+      billing: 'MONTHLY',
+      isDefault: false,
+    });
+
+    await a.caller.student.changePlan({
+      enrollmentId: mt!.id,
+      planId: trimestral.id,
+    });
+
+    const [novo] = await matriculasDe(data.id);
+    expect([novo?.price, novo?.discountPercent]).toEqual([420, 0]);
+  });
+
+  it('matrícula vencida, mesmo marcada como ativa, não dá desconto', async () => {
+    const { data } = await cadastrar(a, [
+      { modalityId: a.muayThai.id, planId: a.mensal.id },
+    ]);
+    const [mt] = await matriculasDe(data.id);
+    /* Terminou e nunca foi renovada nem cancelada. */
+    await prisma.enrollment.update({
+      where: { id: mt!.id },
+      data: { endDate: new Date(Date.now() - 30 * 86_400_000) },
+    });
+
+    await a.caller.student.addEnrollment({
+      studentId: data.id,
+      modalityId: a.jiuJitsu.id,
+      planId: a.mensal.id,
+    });
+
+    const jj = (await matriculasDe(data.id)).find(
+      (m) => m.modalityId === a.jiuJitsu.id,
+    );
+    expect([jj?.price, jj?.discountPercent]).toEqual([200, 0]);
+  });
+});
+
+describe('valores por modalidade, na edição', () => {
+  it('editar a lista não apaga o valor de modalidade que não veio nela', async () => {
+    await a.caller.plans.update({
+      id: a.mensal.id,
+      name: 'Mensal',
+      price: '15000',
+      duration: '1',
+      billing: 'MONTHLY',
+      isDefault: true,
+      modalityPrices: [{ modalityId: a.boxe.id, price: '12000' }],
+    });
+    /* O boxe é desativado; o formulário deixa de mandá-lo... */
+    await a.caller.modalities.update({
+      id: a.boxe.id,
+      name: 'Boxe',
+      isActive: false,
+    });
+    /* ...e o dono mexe só no muay thai. */
+    await a.caller.plans.update({
+      id: a.mensal.id,
+      name: 'Mensal',
+      price: '15000',
+      duration: '1',
+      billing: 'MONTHLY',
+      isDefault: true,
+      modalityPrices: [{ modalityId: a.muayThai.id, price: '13000' }],
+    });
+
+    const { data } = await a.caller.plans.getById({ id: a.mensal.id });
+    expect(
+      data.modalityPrices.map((p) => [p.modality.name, p.price]).sort(),
+    ).toEqual([
+      ['Boxe', 120],
+      ['Jiu-Jitsu', 200],
+      ['Muay Thai', 130],
+    ]);
+  });
+
+  it('valor inválido ou modalidade repetida são recusados, sem apagar nada', async () => {
+    const base = {
+      id: a.mensal.id,
+      name: 'Mensal',
+      price: '15000',
+      duration: '1',
+      billing: 'MONTHLY' as const,
+      isDefault: true,
+    };
+
+    for (const price of ['abc', '-100', '1.5']) {
+      await expect(
+        a.caller.plans.update({
+          ...base,
+          modalityPrices: [{ modalityId: a.jiuJitsu.id, price }],
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    }
+
+    await expect(
+      a.caller.plans.update({
+        ...base,
+        modalityPrices: [
+          { modalityId: a.boxe.id, price: '10000' },
+          { modalityId: a.boxe.id, price: '11000' },
+        ],
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    const { data } = await a.caller.plans.getById({ id: a.mensal.id });
+    expect(data.modalityPrices.map((p) => p.price)).toEqual([200]);
+  });
+});
+
+describe('plano desativado', () => {
+  const desativar = (planId: string, isDefault = false) =>
+    a.caller.plans.update({
+      id: planId,
+      name: 'Mensal',
+      price: '15000',
+      duration: '1',
+      billing: 'MONTHLY',
+      isDefault,
+      isActive: false,
+    });
+
+  it('sai das escolhas novas, mas quem já está nele segue', async () => {
+    const { data } = await cadastrar(a, [
+      { modalityId: a.muayThai.id, planId: a.mensal.id },
+    ]);
+    await desativar(a.mensal.id, true);
+
+    const { data: ativos } = await a.caller.plans.getAll({
+      page: 1,
+      limit: 100,
+      apenasAtivos: true,
+    });
+    expect(ativos.map((p) => p.id)).not.toContain(a.mensal.id);
+
+    await expect(
+      a.caller.student.addEnrollment({
+        studentId: data.id,
+        modalityId: a.boxe.id,
+        planId: a.mensal.id,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(
+      cadastrar(a, [{ modalityId: a.boxe.id, planId: a.mensal.id }]),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+
+    expect(await matriculasDe(data.id)).toHaveLength(1);
+  });
+
+  it('desativar o padrão tira a marca de padrão', async () => {
+    await desativar(a.mensal.id, true);
+    const { data } = await a.caller.plans.getById({ id: a.mensal.id });
+    expect([data.isActive, data.isDefault]).toEqual([false, false]);
+  });
+
+  it('não dá para trocar para um plano desativado', async () => {
+    const { data: trimestral } = await a.caller.plans.create({
+      name: 'Trimestral',
+      price: '42000',
+      duration: '3',
+      billing: 'MONTHLY',
+      isDefault: false,
+    });
+    const { data } = await cadastrar(a, [
+      { modalityId: a.muayThai.id, planId: a.mensal.id },
+    ]);
+    await a.caller.plans.update({
+      id: trimestral.id,
+      name: 'Trimestral',
+      price: '42000',
+      duration: '3',
+      billing: 'MONTHLY',
+      isDefault: false,
+      isActive: false,
+    });
+    const [mt] = await matriculasDe(data.id);
+
+    await expect(
+      a.caller.student.changePlan({
+        enrollmentId: mt!.id,
+        planId: trimestral.id,
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+});
+
 describe('o que já existe não muda', () => {
+  it('mudar a duração do plano não mexe no MRR de quem já está nele', async () => {
+    const { data: trimestral } = await a.caller.plans.create({
+      name: 'Trimestral',
+      price: '42000',
+      duration: '3',
+      billing: 'MONTHLY',
+      isDefault: false,
+    });
+    await cadastrar(a, [{ modalityId: a.muayThai.id, planId: trimestral.id }]);
+    expect((await a.caller.dashboard.getOverview({})).kpis.mrr).toBeCloseTo(
+      140,
+    );
+
+    await a.caller.plans.update({
+      id: trimestral.id,
+      name: 'Trimestral',
+      price: '42000',
+      duration: '1',
+      billing: 'MONTHLY',
+      isDefault: false,
+    });
+
+    expect((await a.caller.dashboard.getOverview({})).kpis.mrr).toBeCloseTo(
+      140,
+    );
+  });
+
   it('mudar o preço do plano não mexe na matrícula nem nas parcelas', async () => {
     const { data } = await cadastrar(a, [
       { modalityId: a.muayThai.id, planId: a.mensal.id },

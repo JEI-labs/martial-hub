@@ -30,7 +30,13 @@ export const ModalityFormModal: React.FC<IModalityFormModal> = ({
   const utils = api.useUtils();
   const isEditing = !!modality;
 
-  const onSuccess = () => utils.modalities.list.invalidate();
+  /* Junto a lista de faixas: modalidade nova, renomeada ou desativada muda o
+     que o cadastro de aluno e o cartão de graduação oferecem. */
+  const onSuccess = () =>
+    Promise.all([
+      utils.modalities.list.invalidate(),
+      utils.graduations.list.invalidate(),
+    ]);
   const create = api.modalities.create.useMutation({ onSuccess });
   const update = api.modalities.update.useMutation({ onSuccess });
 

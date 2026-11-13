@@ -6,6 +6,8 @@ export interface ActiveEnrollmentRow {
   planId: string;
   planName: string;
   discountPercent: number;
+  /** Decide se a matrícula é vigente, para o desconto da 2ª modalidade. */
+  endDate: Date | string;
 }
 
 export interface StudentRow {

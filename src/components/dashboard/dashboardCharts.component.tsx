@@ -23,6 +23,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { grauDaFaixa } from '@/common/constants/graduations';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   Select,
@@ -614,11 +615,17 @@ export function GraduationChart({
 
   const data = (grupo?.bars ?? []).map((item) => {
     const isNone = item.name === null;
+    /* O grau só existe no Muay Thai; nas outras, o eixo mostra o nome da
+       faixa ("Azul"), e não um "14º" que ninguém usa. */
+    const grau = grauDaFaixa(item, grupo?.modality.slug);
+    const curto = grau ? grau.replace(' grau', '') : (item.name ?? '');
 
     return {
       ...item,
-      label: isNone ? 'Sem graduação' : `${item.position + 1}º`,
-      full: isNone ? 'Sem graduação' : (item.name ?? ''),
+      label: isNone ? 'Sem graduação' : curto,
+      full: isNone
+        ? 'Sem graduação'
+        : [grau, item.name].filter(Boolean).join(' · '),
     };
   });
 

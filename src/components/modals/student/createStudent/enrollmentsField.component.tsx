@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useWatch, type Control, type UseFormSetValue } from 'react-hook-form';
 
 import { PLAN_BILLING_LABEL } from '@/common/constants/planBilling';
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
@@ -15,6 +16,7 @@ import {
 import { cn } from '@/lib/utils';
 import {
   GraduationBadge,
+  nomeDaFaixa,
   type GraduationView,
 } from '@/components/graduationBadge/graduationBadge.component';
 import {
@@ -27,7 +29,9 @@ import type {
   IEnrollmentRequest,
   IStudentCreateTypes,
 } from '@/server/validations/students';
+import { PlanOptionLabel } from '@/components/plans/planOptionLabel.component';
 import { maskBRL } from '@/utils/masksUtils';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type Modalidade = {
   id: string;
@@ -51,6 +55,11 @@ interface EnrollmentsFieldProps {
   control: Control<IStudentCreateTypes>;
   setValue: UseFormSetValue<IStudentCreateTypes>;
   modalidades: Array<Modalidade>;
+  /** As modalidades ainda não chegaram: lista vazia não quer dizer nada. */
+  carregando?: boolean;
+  /** A consulta das modalidades falhou; `tentarDeNovo` refaz. */
+  erro?: boolean;
+  tentarDeNovo?: () => void;
   planos: Array<Plano>;
   defaultPlanId?: string;
   /** Desconto da academia da 2ª modalidade em diante, em %. */
@@ -68,6 +77,9 @@ export function EnrollmentsField({
   control,
   setValue,
   modalidades,
+  carregando = false,
+  erro = false,
+  tentarDeNovo,
   planos,
   defaultPlanId,
   desconto,
@@ -103,6 +115,28 @@ export function EnrollmentsField({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultPlanId]);
 
+  /* "A academia não tem modalidades" só depois de saber: enquanto carrega,
+     ou se a consulta falhou, a lista vazia não diz isso. */
+  if (carregando) return <Skeleton className="h-24 w-full rounded-xl" />;
+
+  if (erro) {
+    return (
+      <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed p-4 text-sm">
+        <span>Não deu para carregar as modalidades da academia.</span>
+        {tentarDeNovo && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={tentarDeNovo}
+          >
+            Tentar de novo
+          </Button>
+        )}
+      </div>
+    );
+  }
+
   if (modalidades.length === 0) {
     return (
       <p className="text-muted-foreground rounded-xl border border-dashed p-4 text-sm">
@@ -133,12 +167,17 @@ export function EnrollmentsField({
         : escolhidas.filter((e) => e.modalityId !== modalityId),
     );
 
-  /* A mesma conta do servidor: cheio na mais cara, desconto nas outras. */
-  const cheios = escolhidas.map((e) => {
+  /* A mesma conta do servidor: cheio na mais cara pelo valor mensal,
+     desconto nas outras. */
+  const novas = escolhidas.map((e) => {
     const plano = planos.find((p) => p.id === e.planId);
-    return plano ? precoNaModalidade(plano, e.modalityId) : 0;
+    return {
+      preco: plano ? precoNaModalidade(plano, e.modalityId) : 0,
+      duracao: plano?.duration ?? 1,
+    };
   });
-  const descontos = descontosDasMatriculas(cheios, 0, desconto);
+  const cheios = novas.map((n) => n.preco);
+  const descontos = descontosDasMatriculas(novas, [], desconto);
   const valorDe = (modalityId: string) => {
     const index = escolhidas.findIndex((e) => e.modalityId === modalityId);
     const plano = planos.find((p) => p.id === escolhidas[index]?.planId);
@@ -212,11 +251,10 @@ export function EnrollmentsField({
                   <SelectContent>
                     {planos.map((plano) => (
                       <SelectItem key={plano.id} value={plano.id}>
-                        {plano.name} ·{' '}
-                        {maskBRL(precoNaModalidade(plano, modalidade.id), true)}{' '}
-                        · {plano.duration}{' '}
-                        {plano.duration === 1 ? 'mês' : 'meses'} ·{' '}
-                        {PLAN_BILLING_LABEL[plano.billing]}
+                        <PlanOptionLabel
+                          plan={plano}
+                          preco={precoNaModalidade(plano, modalidade.id)}
+                        />
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -250,7 +288,7 @@ export function EnrollmentsField({
                             graduation={faixa}
                             showLabel={false}
                           />
-                          {faixa.position + 1}º · {faixa.name}
+                          {nomeDaFaixa(faixa)}
                         </span>
                       </SelectItem>
                     ))}

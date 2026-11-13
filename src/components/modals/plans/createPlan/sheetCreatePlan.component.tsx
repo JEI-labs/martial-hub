@@ -126,7 +126,11 @@ export const SheetCreatePlan: React.FC<ICreateSheetPlan> = ({
           bottomDescription="Vem escolhido sozinho ao matricular um aluno. Só um plano pode ser o padrão: marcar este tira o anterior."
         />
 
-        <ModalityPricesField setValue={form.setValue} open={isOpen} />
+        <ModalityPricesField
+          control={form.control}
+          setValue={form.setValue}
+          open={isOpen}
+        />
       </FormModal>
     </Form>
   );

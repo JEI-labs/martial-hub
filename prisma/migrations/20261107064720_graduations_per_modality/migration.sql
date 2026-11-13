@@ -3,8 +3,9 @@
 -- de faixas, pré-cadastrada a partir do catálogo.
 --
 -- Regra desta migration: nenhum aluno perde a faixa. `GRAU_N` vira a faixa de
--- ordem N do Muay Thai da academia dele, e o passo 6 confere isso antes de
--- apagar a coluna antiga — se a conta não fechar, a migration inteira aborta.
+-- ordem N do Muay Thai da academia dele (o que se chama assim, ou o que ela
+-- renomeou), e o passo 6 confere isso antes de apagar a coluna antiga — se a
+-- conta não fechar, a migration inteira aborta.
 
 -- 1. As faixas.
 CREATE TABLE "Graduation" (
@@ -24,21 +25,60 @@ CREATE INDEX "Graduation_modalityId_position_idx" ON "Graduation"("modalityId", 
 
 ALTER TABLE "Graduation" ADD CONSTRAINT "Graduation_modalityId_fkey" FOREIGN KEY ("modalityId") REFERENCES "Modality"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- 2. Rede de segurança. O backfill da migration de modalidades deu Muay Thai
--- a toda academia, mas desde então ela pode ter sido renomeada (o slug muda
--- junto) ou apagada. Academia com aluno graduado e sem `muay-thai` ganha uma,
--- desativada e no fim da lista: as faixas antigas precisam de onde morar, e
--- desativada ela não aparece nas escolhas novas.
+-- 2. Onde moram as faixas antigas. GRAU_N é faixa do Muay Thai, e cada
+-- academia com aluno graduado precisa de uma modalidade que receba as 11
+-- faixas dele. Ela é escolhida aqui, uma por academia, e os passos 3 e 5 a
+-- usam — em vez de casar só pelo slug `muay-thai`, que some quando a
+-- academia renomeia a modalidade (o slug muda junto com o nome).
+CREATE TEMP TABLE "_MuayThaiDaAcademia" (
+    "tenantId" TEXT PRIMARY KEY,
+    "modalityId" TEXT NOT NULL
+);
+
+-- 2a. A que se chama Muay Thai.
+INSERT INTO "_MuayThaiDaAcademia" ("tenantId", "modalityId")
+SELECT "tenantId", "id" FROM "Modality" WHERE "slug" = 'muay-thai';
+
+-- 2b. Renomeada. O backfill da migration de modalidades deu Muay Thai a toda
+-- academia; se o nome mudou ("Muay Thai Tradicional"), ela é a modalidade
+-- mais antiga da academia, e o nome com "muay" ou "thai" desempata. Só fora
+-- do catálogo: uma que virou "Jiu-Jitsu" ganha as faixas do Jiu-Jitsu no
+-- passo 3, e não pode ganhar as do Muay Thai também. Só para academia com
+-- aluno graduado: sem ninguém para acomodar, não há por que adivinhar.
+INSERT INTO "_MuayThaiDaAcademia" ("tenantId", "modalityId")
+SELECT DISTINCT ON (m."tenantId") m."tenantId", m."id"
+FROM "Modality" m
+WHERE m."slug" NOT IN ('muay-thai', 'jiu-jitsu', 'karate', 'judo')
+  AND NOT EXISTS (SELECT 1 FROM "_MuayThaiDaAcademia" x WHERE x."tenantId" = m."tenantId")
+  AND EXISTS (SELECT 1 FROM "Student" s WHERE s."tenantId" = m."tenantId" AND s."graduation" IS NOT NULL)
+ORDER BY m."tenantId",
+         (m."slug" LIKE '%muay%' OR m."slug" LIKE '%thai%') DESC,
+         m."createdAt", m."position";
+
+-- 2c. Não tem nenhuma que sirva (ex.: academia criada pelo master sem
+-- modalidades, mas com aluno graduado): ganha um Muay Thai, no fim da lista.
+-- Ativo quando ela não tem outra modalidade ativa — desativado, ele deixaria
+-- a academia sem modalidade nenhuma para matricular e, de quebra, calaria o
+-- aviso de modalidades pendentes, que só olha se a lista está vazia.
 INSERT INTO "Modality" ("id", "name", "slug", "isActive", "position", "updatedAt", "tenantId")
-SELECT gen_random_uuid(), 'Muay Thai', 'muay-thai', false,
+SELECT gen_random_uuid(), 'Muay Thai', 'muay-thai',
+       NOT EXISTS (SELECT 1 FROM "Modality" m WHERE m."tenantId" = t."id" AND m."isActive"),
        COALESCE((SELECT MAX(m."position") + 1 FROM "Modality" m WHERE m."tenantId" = t."id"), 0),
        CURRENT_TIMESTAMP, t."id"
 FROM "Tenant" t
 WHERE EXISTS (SELECT 1 FROM "Student" s WHERE s."tenantId" = t."id" AND s."graduation" IS NOT NULL)
-  AND NOT EXISTS (SELECT 1 FROM "Modality" m WHERE m."tenantId" = t."id" AND m."slug" = 'muay-thai');
+  AND NOT EXISTS (SELECT 1 FROM "_MuayThaiDaAcademia" x WHERE x."tenantId" = t."id");
 
--- 3. O catálogo, para toda modalidade que já existe e está nele (pelo slug).
--- Cópia de `src/common/constants/graduations.ts` no dia desta migration.
+INSERT INTO "_MuayThaiDaAcademia" ("tenantId", "modalityId")
+SELECT m."tenantId", m."id"
+FROM "Modality" m
+WHERE m."slug" = 'muay-thai'
+  AND NOT EXISTS (SELECT 1 FROM "_MuayThaiDaAcademia" x WHERE x."tenantId" = m."tenantId");
+
+-- 3. O catálogo, para toda modalidade que já existe e está nele (pelo slug),
+-- e as faixas do Muay Thai para a modalidade escolhida no passo 2, mesmo
+-- renomeada. Cópia de `src/common/constants/graduations.ts` no dia desta
+-- migration.
 INSERT INTO "Graduation" ("id", "name", "level", "colors", "position", "updatedAt", "modalityId")
 SELECT gen_random_uuid(), c."name", c."level", c."colors", c."position", CURRENT_TIMESTAMP, m."id"
 FROM "Modality" m
@@ -91,7 +131,11 @@ JOIN (VALUES
     ('judo', 6, 'Roxa', 'Avançado', ARRAY['#7e22ce']::TEXT[]),
     ('judo', 7, 'Marrom', 'Avançado', ARRAY['#78350f']::TEXT[]),
     ('judo', 8, 'Preta', 'Faixa preta', ARRAY['#111111']::TEXT[])
-) AS c("slug", "position", "name", "level", "colors") ON c."slug" = m."slug";
+) AS c("slug", "position", "name", "level", "colors")
+  ON c."slug" = CASE
+    WHEN EXISTS (SELECT 1 FROM "_MuayThaiDaAcademia" x WHERE x."modalityId" = m."id") THEN 'muay-thai'
+    ELSE m."slug"
+  END;
 
 -- 4. A faixa do aluno passa a apontar para a tabela. NO ACTION: apagar uma
 -- faixa em uso é recusado, em vez de tirar a graduação do aluno em silêncio.
@@ -102,14 +146,13 @@ CREATE INDEX "Student_graduationId_idx" ON "Student"("graduationId");
 ALTER TABLE "Student" ADD CONSTRAINT "Student_graduationId_fkey" FOREIGN KEY ("graduationId") REFERENCES "Graduation"("id") ON DELETE NO ACTION ON UPDATE CASCADE;
 
 -- 5. GRAU_N vira a faixa de posição N-1 (a posição começa em 0) do Muay Thai
--- da academia do aluno.
+-- da academia do aluno — a modalidade escolhida no passo 2.
 UPDATE "Student" s
 SET "graduationId" = g."id"
-FROM "Modality" m
-JOIN "Graduation" g ON g."modalityId" = m."id"
+FROM "_MuayThaiDaAcademia" x
+JOIN "Graduation" g ON g."modalityId" = x."modalityId"
 WHERE s."graduation" IS NOT NULL
-  AND m."tenantId" = s."tenantId"
-  AND m."slug" = 'muay-thai'
+  AND x."tenantId" = s."tenantId"
   AND g."position" = SUBSTRING(s."graduation"::TEXT FROM 6)::INTEGER - 1;
 
 -- 6. A conferência: todo aluno que tinha faixa tem faixa, e a mesma.
@@ -133,6 +176,8 @@ BEGIN
 
   RAISE NOTICE 'Graduações conferidas: % alunos mantiveram a faixa.', depois;
 END $$;
+
+DROP TABLE "_MuayThaiDaAcademia";
 
 -- 7. Só agora o enum sai.
 ALTER TABLE "Student" DROP COLUMN "graduation";

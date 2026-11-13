@@ -16,7 +16,11 @@ import {
   IUpdatePlanSchema,
   updatePlanSchema,
 } from '@/server/validations/plans';
-import { maskDecimalWithAcronym, unmaskDecimal } from '@/utils/masksUtils';
+import {
+  maskDecimalWithAcronym,
+  unmaskDecimal,
+  valueToCents,
+} from '@/utils/masksUtils';
 import { maskOnlyNumbersV2 } from '@/common/utils/mask';
 import { EPlanBilling } from '@prisma/client';
 import { ModalityPricesField } from '@/components/modals/plans/modalityPricesField.component';
@@ -50,6 +54,7 @@ export const SheetEditPlan: React.FC<ISheetEditPlan> = ({
       duration: '1',
       billing: EPlanBilling.MONTHLY,
       isDefault: false,
+      isActive: true,
     },
     mode: 'onChange',
   });
@@ -65,6 +70,13 @@ export const SheetEditPlan: React.FC<ISheetEditPlan> = ({
         duration: plan.duration.toString(),
         billing: plan.billing,
         isDefault: plan.isDefault,
+        isActive: plan.isActive,
+        /* Os valores por modalidade entram no formulário junto com o resto:
+           o campo mostra o que está aqui, e o que está aqui é o que vai. */
+        modalityPrices: plan.modalityPrices.map((item) => ({
+          modalityId: item.modalityId,
+          price: valueToCents(item.price),
+        })),
       });
     }
   }, [planQuery.data, form]);
@@ -165,12 +177,26 @@ export const SheetEditPlan: React.FC<ISheetEditPlan> = ({
               title="Plano padrão"
               bottomDescription="Vem escolhido sozinho ao matricular um aluno. Só um plano pode ser o padrão: marcar este tira o anterior."
             />
-
-            <ModalityPricesField
-              setValue={form.setValue}
-              open={isOpen}
-              existentes={planQuery.data?.data.modalityPrices}
+          </div>
+          <div className="col-span-4">
+            <FormSwitchComponent
+              control={form.control}
+              name="isActive"
+              title="Plano ativo"
+              bottomDescription="Desativado, o plano sai das matrículas novas e da troca de plano; quem já está nele segue. É como aposentar um plano que já foi usado e por isso não pode ser excluído."
             />
+          </div>
+          <div className="col-span-4">
+            {/* Só depois de o plano chegar: antes disso o formulário ainda
+                não tem os valores dele, e o que se digitasse seria
+                atropelado pelo reset. */}
+            {planQuery.data && (
+              <ModalityPricesField
+                control={form.control}
+                setValue={form.setValue}
+                open={isOpen}
+              />
+            )}
           </div>
         </div>
       </FormModal>

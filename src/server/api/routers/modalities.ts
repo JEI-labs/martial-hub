@@ -71,8 +71,11 @@ export const modalitiesRouter = createTRPCRouter({
             position: (ultima._max.position ?? -1) + 1,
             tenantId,
             /* Nasce com as faixas do catálogo, quando ele conhece a
-               modalidade; boxe e nomes livres nascem sem. */
-            graduations: { create: graduacoesDoCatalogo(slug) },
+               modalidade; boxe e nomes livres nascem sem. Um INSERT só para
+               todas, em vez de um por faixa. */
+            graduations: {
+              createMany: { data: graduacoesDoCatalogo(slug) },
+            },
           },
         });
       } catch (err) {
@@ -117,9 +120,29 @@ export const modalitiesRouter = createTRPCRouter({
         await garantirOutraAtiva(ctx.prisma, tenantId, atual.id);
       }
 
+      /* Renomear para um nome do catálogo ("Jiu Jitsu Kids" → "Jiu-Jitsu",
+         "Karate do" → "Karatê") dá a ela as faixas que teria se tivesse
+         nascido com esse nome. Só a quem não tem nenhuma: as faixas que ela
+         já tem podem estar em uso, e trocar uma lista pela outra tiraria a
+         graduação dos alunos. */
+      const faixasDoNomeNovo =
+        slug !== atual.slug &&
+        (await ctx.prisma.graduation.count({
+          where: { modalityId: atual.id },
+        })) === 0
+          ? graduacoesDoCatalogo(slug)
+          : [];
+
       return ctx.prisma.modality.update({
         where: { id: atual.id, tenantId },
-        data: { name: input.name, slug, isActive: input.isActive },
+        data: {
+          name: input.name,
+          slug,
+          isActive: input.isActive,
+          ...(faixasDoNomeNovo.length > 0
+            ? { graduations: { createMany: { data: faixasDoNomeNovo } } }
+            : {}),
+        },
       });
     }),
 
@@ -201,20 +224,37 @@ export const modalitiesRouter = createTRPCRouter({
             ? `${matriculas} ${matriculas === 1 ? 'matrícula' : 'matrículas'} em ${alvo.name}, contando as encerradas`
             : `${alunosComFaixa} ${alunosComFaixa === 1 ? 'aluno com faixa' : 'alunos com faixa'} de ${alvo.name}`;
 
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: `Há ${motivo}. Desative a modalidade em vez de apagar.`,
-        });
+        throw emUso(alvo.name, motivo);
       }
 
       if (alvo.isActive) {
         await garantirOutraAtiva(ctx.prisma, tenantId, alvo.id);
       }
 
-      await ctx.prisma.modality.delete({ where: { id: alvo.id, tenantId } });
+      try {
+        await ctx.prisma.modality.delete({ where: { id: alvo.id, tenantId } });
+      } catch (err) {
+        /* Alguém deu uma faixa dela (ou matriculou nela) entre a contagem
+           acima e o delete: o FK barra. É a mesma recusa, só que pelo banco. */
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2003'
+        ) {
+          throw emUso(alvo.name);
+        }
+        throw err;
+      }
+
       return { ok: true };
     }),
 });
+
+/** `motivo` é o que a contagem achou; sem ele, a recusa veio do banco. */
+const emUso = (nome: string, motivo?: string) =>
+  new TRPCError({
+    code: 'BAD_REQUEST',
+    message: `Há ${motivo ?? `alunos com faixa ou matrícula de ${nome}`}. Desative a modalidade em vez de apagar.`,
+  });
 
 /**
  * Academia sem modalidade ativa não tem o que matricular — a mesma ideia de

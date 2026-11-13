@@ -66,6 +66,14 @@ const PlansList: React.FC<IPlanList> = ({ plans, isLoading, onEdit }) => {
                             Padrão
                           </Badge>
                         )}
+                        {!plan.isActive && (
+                          <Badge
+                            variant="outline"
+                            className="text-muted-foreground font-normal"
+                          >
+                            Desativado
+                          </Badge>
+                        )}
                       </div>
                     </TableCell>
 

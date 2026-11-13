@@ -2,13 +2,21 @@
 
 import { useState } from 'react';
 import { format } from 'date-fns';
-import { Award, ChevronDown, ChevronUp, Undo2 } from 'lucide-react';
+import {
+  Award,
+  ChevronDown,
+  ChevronUp,
+  Loader2,
+  RotateCw,
+  Undo2,
+} from 'lucide-react';
 
 import {
   GraduationBadge,
   descreverGraduacao,
   type GraduationView,
 } from './graduationBadge.component';
+import { useFaixasDisponiveis } from './useFaixasDisponiveis';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -21,6 +29,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/trpc/react';
@@ -28,7 +37,7 @@ import { maskDate } from '@/utils/masksUtils';
 
 type Faixa = GraduationView & {
   id: string;
-  modality: { id: string; name: string };
+  modality: { id: string; name: string; slug?: string };
 };
 
 /** Um registro do histórico de graduação do aluno. */
@@ -73,9 +82,13 @@ export function GraduationCard({
   const [awardedAt, setAwardedAt] = useState(hoje);
   const [note, setNote] = useState('');
 
-  const { data: catalogo } = api.graduations.list.useQuery(undefined, {
-    staleTime: 5 * 60 * 1000,
-  });
+  const {
+    modalidades: catalogo,
+    isLoading,
+    isError,
+    isFetching,
+    refetch,
+  } = useFaixasDisponiveis();
 
   const depois = () => {
     utils.student.invalidate();
@@ -110,7 +123,33 @@ export function GraduationCard({
       }),
   });
 
-  if (!catalogo) return null;
+  /* Carregando, o cartão guarda o lugar em vez de sumir e voltar: a
+     graduação do aluno é informação, não enfeite. */
+  if (isLoading) return <Skeleton className="h-36 w-full lg:w-80" />;
+
+  /* Sem o catálogo não dá para graduar, mas a faixa atual vem com o aluno e
+     continua aparecendo — com o erro e um jeito de tentar de novo. */
+  const erroDoCatalogo = isError && (
+    <div className="space-y-2">
+      <p className="text-muted-foreground text-xs">
+        Não deu para carregar as faixas da academia.
+      </p>
+      <Button
+        variant="outline"
+        size="sm"
+        className="w-full"
+        disabled={isFetching}
+        onClick={() => void refetch()}
+      >
+        {isFetching ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <RotateCw className="mr-2 h-4 w-4" />
+        )}
+        Tentar de novo
+      </Button>
+    </div>
+  );
 
   /* As linhas: as modalidades com faixa que o aluno faz hoje, mais as que
      ele já teve faixa (mesmo que tenha saído delas), na ordem da academia. */
@@ -137,7 +176,7 @@ export function GraduationCard({
     ),
   ];
 
-  if (linhas.length === 0) return null;
+  if (linhas.length === 0 && !isError) return null;
 
   const modalidadeDoDialogo = catalogo.find((m) => m.id === graduarEm);
   const atualDoDialogo = graduarEm ? historicoDe(graduarEm)[0] : undefined;
@@ -166,6 +205,7 @@ export function GraduationCard({
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 p-5 pt-0">
+          {erroDoCatalogo}
           {linhas.map((modalidade) => {
             const registros = historicoDe(modalidade.id);
             const atual = registros[0];
@@ -305,9 +345,11 @@ export function GraduationCard({
                       {faixa.name}
                       {ehAtual ? ' (atual)' : ''}
                     </span>
-                    <span className="text-muted-foreground block text-xs">
-                      {descreverGraduacao(faixa)}
-                    </span>
+                    {descreverGraduacao(faixa) && (
+                      <span className="text-muted-foreground block text-xs">
+                        {descreverGraduacao(faixa)}
+                      </span>
+                    )}
                   </span>
                 </button>
               );

@@ -1,4 +1,4 @@
-import { type Prisma, type PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { TRPCError } from '@trpc/server';
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -10,7 +10,9 @@ export const graduationSelect = {
   level: true,
   colors: true,
   position: true,
-  modality: { select: { id: true, name: true, position: true } },
+  /* O slug decide se a faixa se diz em grau ("4º grau") ou só pelo nome;
+     a posição ordena as modalidades. */
+  modality: { select: { id: true, name: true, slug: true, position: true } },
 } satisfies Prisma.GraduationSelect;
 
 /** Um registro do histórico de graduação, como as telas mostram. */
@@ -59,11 +61,13 @@ export function faixasAtuais<T extends Registro>(historico: Array<T>) {
 }
 
 /**
- * Confere que a faixa é desta academia e, quando dito, da modalidade certa.
+ * Confere que a faixa pode ser dada: é desta academia, da modalidade certa
+ * (quando dito) e de modalidade ativa.
  *
  * O id chega do navegador: sem esta conferência, uma academia gravaria no
  * aluno dela a faixa cadastrada por outra — ou a faixa do jiu-jitsu na linha
- * do muay thai.
+ * do muay thai. E um cache velho (ou uma chamada direta) daria faixa de
+ * modalidade desativada, que a tela já não oferece.
  */
 export async function conferirFaixa(
   db: Db,
@@ -79,7 +83,7 @@ export async function conferirFaixa(
     select: {
       id: true,
       name: true,
-      modality: { select: { id: true, name: true } },
+      modality: { select: { id: true, name: true, isActive: true } },
     },
   });
 
@@ -92,5 +96,34 @@ export async function conferirFaixa(
     });
   }
 
+  if (!faixa.modality.isActive) {
+    throw new TRPCError({
+      code: 'BAD_REQUEST',
+      message: `A modalidade ${faixa.modality.name} está desativada. Reative-a para dar faixas dela.`,
+    });
+  }
+
   return faixa;
+}
+
+/**
+ * A faixa conferida pode sumir antes da gravação: a modalidade é apagada
+ * entre o `conferirFaixa` e o insert do histórico. O banco recusa (o FK do
+ * registro), e isto troca o erro cru (P2003, que viraria um 500) pela
+ * mensagem de faixa não encontrada. Qualquer outro erro passa adiante.
+ */
+export function traduzirFaixaSumida(err: unknown): unknown {
+  if (
+    err instanceof Prisma.PrismaClientKnownRequestError &&
+    err.code === 'P2003' &&
+    String(
+      err.meta?.field_name ?? err.meta?.constraint ?? err.message,
+    ).includes('graduationId')
+  ) {
+    return new TRPCError({
+      code: 'BAD_REQUEST',
+      message: 'Graduação não encontrada nesta academia.',
+    });
+  }
+  return err;
 }

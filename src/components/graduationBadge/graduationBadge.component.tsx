@@ -1,3 +1,4 @@
+import { grauDaFaixa } from '@/common/constants/graduations';
 import { cn } from '@/lib/utils';
 
 /** O que é preciso de uma faixa para desenhá-la, venha de onde vier. */
@@ -8,13 +9,36 @@ export interface GraduationView {
   colors: Array<string>;
   /** Ordem dentro da modalidade, a partir de 0. */
   position: number;
-  modality?: { name: string } | null;
+  /** O slug decide se a faixa tem número de grau (`grauDaFaixa`). */
+  modality?: { name: string; slug?: string } | null;
 }
 
-/** "4º grau · Intermediário": a ordem da faixa e o nível, quando houver. */
+/**
+ * A linha de baixo do badge: "4º grau · Intermediário" no Muay Thai, só o
+ * nível ("Adulto") onde não existe grau. Vazio quando não há nenhum dos dois.
+ */
 export function descreverGraduacao(graduation: GraduationView): string {
-  const grau = `${graduation.position + 1}º grau`;
-  return graduation.level ? `${grau} · ${graduation.level}` : grau;
+  return [grauDaFaixa(graduation, graduation.modality?.slug), graduation.level]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/**
+ * A faixa numa linha só, para listas e selects: "Muay Thai · 4º grau ·
+ * Vermelho e Azul Claro", ou "Jiu-Jitsu · Azul". A modalidade só entra quando
+ * pedida — com uma modalidade só, ela é óbvia.
+ */
+export function nomeDaFaixa(
+  graduation: GraduationView,
+  { comModalidade = false }: { comModalidade?: boolean } = {},
+): string {
+  return [
+    comModalidade ? graduation.modality?.name : null,
+    grauDaFaixa(graduation, graduation.modality?.slug),
+    graduation.name,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 }
 
 interface GraduationBadgeProps {
@@ -62,9 +86,11 @@ export function GraduationBadge({
       {showLabel && (
         <span className="min-w-0">
           <span className="block truncate text-sm">{graduation.name}</span>
-          <span className="text-muted-foreground block text-xs">
-            {descricao}
-          </span>
+          {descricao && (
+            <span className="text-muted-foreground block text-xs">
+              {descricao}
+            </span>
+          )}
         </span>
       )}
     </span>

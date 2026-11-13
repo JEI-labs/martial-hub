@@ -373,6 +373,10 @@ model Plan {
   /// Plano que já vem escolhido ao matricular. No máximo um por academia —
   /// a regra é aplicada em transação no router, não por constraint.
   isDefault   Boolean      @default(false)
+  /// Desativado sai das escolhas de matrícula nova e de troca de plano; quem
+  /// já está nele segue. É o jeito de aposentar um plano usado, que não pode
+  /// ser apagado sem levar o histórico das matrículas.
+  isActive    Boolean      @default(true)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
@@ -442,12 +446,24 @@ model Enrollment {
   price           Float
   /// Desconto aplicado, em %. 0 é valor cheio.
   discountPercent Int   @default(0)
+  /// Meses do contrato, também retrato do dia: o MRR divide `price` por
+  /// isto. Dividir pela duração atual do plano mudava o MRR de contratos em
+  /// vigor quando alguém editava o plano.
+  duration        Int
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  plan    Plan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  /// NoAction pelo mesmo motivo: excluir um plano apagava as matrículas nele
+  /// e soltava as parcelas delas. (Restrict barraria a exclusão da academia,
+  /// que apaga planos e matrículas no mesmo comando.)
+  plan    Plan    @relation(fields: [planId], references: [id], onDelete: NoAction)
 
   payments Payment[]
 
+  /// Também existe, só no SQL da migration `enrollment_per_modality`, o
+  /// índice único parcial `Enrollment_studentId_modalityId_active_key`:
+  /// (studentId, modalityId) WHERE isActive — uma matrícula ativa por aluno
+  /// e modalidade. O Prisma não descreve índice parcial, mas também não o
+  /// apaga: o `migrate diff` contra este schema sai vazio.
   @@index([studentId, isActive])
   @@index([modalityId])
 }

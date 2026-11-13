@@ -1,7 +1,7 @@
 'use client';
 
 import { GraduationCard } from '@/components/graduationBadge/graduationCard.component';
-import { descreverGraduacao } from '@/components/graduationBadge/graduationBadge.component';
+import { nomeDaFaixa } from '@/components/graduationBadge/graduationBadge.component';
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
@@ -383,11 +383,7 @@ export default function StudentDetailPage({
                 ? 'Sem graduação'
                 : student.currentGraduations
                     .map(({ graduation }) =>
-                      [
-                        graduation.modality.name,
-                        descreverGraduacao(graduation).split(' · ')[0],
-                        graduation.name,
-                      ].join(' · '),
+                      nomeDaFaixa(graduation, { comModalidade: true }),
                     )
                     .join(' | ')
             }
@@ -744,7 +740,7 @@ export default function StudentDetailPage({
         studentId={student.id}
         studentName={student.name}
         enrollment={changePlanFor}
-        enrolledModalityIds={ativas.map((e) => e.modality.id)}
+        activeEnrollments={ativas}
         open={changePlanOpen}
         onOpenChange={setChangePlanOpen}
         onChanged={refetch}

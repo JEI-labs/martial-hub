@@ -131,10 +131,36 @@ export const GRADUATION_CATALOG: Readonly<
  * ordem. Lista vazia para quem não está no catálogo.
  */
 export function graduacoesDoCatalogo(slug: string) {
-  return (GRADUATION_CATALOG[slug] ?? []).map((faixa, position) => ({
+  /* `hasOwn`, e não `CATALOG[slug]`: o objeto herda de Object.prototype, e
+     uma modalidade chamada "Constructor" acharia a função `Object` ali. */
+  const faixas = Object.hasOwn(GRADUATION_CATALOG, slug)
+    ? GRADUATION_CATALOG[slug]!
+    : [];
+
+  return faixas.map((faixa, position) => ({
     name: faixa.name,
     level: faixa.level,
     colors: [...faixa.colors],
     position,
   }));
+}
+
+/**
+ * Modalidades em que a faixa tem número de grau. No Muay Thai cada faixa é um
+ * grau (o 1º é a branca, o 11º a preta, branca e vermelha); no Jiu-Jitsu e
+ * afins não existe "14º grau", e a faixa se diz pelo nome.
+ */
+const MODALIDADES_COM_GRAU = new Set(['muay-thai']);
+
+/**
+ * "4º grau", ou `null` quando a modalidade não conta faixa em grau. A posição
+ * começa em 0; o grau, em 1.
+ */
+export function grauDaFaixa(
+  faixa: { position: number },
+  modalitySlug: string | null | undefined,
+): string | null {
+  return modalitySlug && MODALIDADES_COM_GRAU.has(modalitySlug)
+    ? `${faixa.position + 1}º grau`
+    : null;
 }

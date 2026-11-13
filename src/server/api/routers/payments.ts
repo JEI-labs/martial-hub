@@ -12,6 +12,11 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { capitalize } from 'lodash';
 
+import {
+  categoriaDeAlunos,
+  enrollmentModalitySelect,
+} from '@/server/enrollments';
+
 export const paymentsRouter = createTRPCRouter({
   getPaymentsByStudent: protectedProcedure
     .input(z.object({ studentId: z.string() }))
@@ -29,9 +34,7 @@ export const paymentsRouter = createTRPCRouter({
           student: { tenantId },
         },
         include: {
-          enrollment: {
-            select: { modality: { select: { id: true, name: true } } },
-          },
+          enrollment: { select: enrollmentModalitySelect },
         },
       });
 
@@ -84,9 +87,7 @@ export const paymentsRouter = createTRPCRouter({
         ctx.prisma.payment.findMany({
           where,
           include: {
-            enrollment: {
-              select: { modality: { select: { id: true, name: true } } },
-            },
+            enrollment: { select: enrollmentModalitySelect },
           },
           orderBy: { dueDate: 'desc' },
           skip: (input.page - 1) * input.limit,
@@ -143,7 +144,8 @@ export const paymentsRouter = createTRPCRouter({
         if (!payment) {
           throw new TRPCError({
             code: 'NOT_FOUND',
-            message: 'Parcela pendente não encontrada.',
+            message:
+              'Parcela pendente não encontrada. Ela pode já ter sido paga; recarregue a lista.',
           });
         }
 
@@ -162,20 +164,7 @@ export const paymentsRouter = createTRPCRouter({
           }
         }
 
-        const category = await ctx.prisma.category.findFirst({
-          where: {
-            tenantId,
-            isFixed: true,
-            name: { equals: 'Alunos', mode: 'insensitive' },
-          },
-        });
-
-        if (!category?.id) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: 'Categoria "Alunos" não encontrada',
-          });
-        }
+        const category = await categoriaDeAlunos(ctx.prisma, tenantId);
 
         /* O valor é o da parcela, não o preço de hoje do plano: uma
            mensalidade reajustada não pode reescrever o que já estava
@@ -213,17 +202,30 @@ export const paymentsRouter = createTRPCRouter({
           locale: ptBR,
         });
 
-        await ctx.prisma.$transaction([
-          ctx.prisma.payment.update({
-            where: { id: payment.id },
+        await ctx.prisma.$transaction(async (tx) => {
+          /* A baixa só vale se a parcela ainda está pendente: duas telas (ou
+             duas pessoas) dando baixa ao mesmo tempo leram as duas PENDING lá
+             em cima, e sem esta condição as duas lançavam a receita. A
+             segunda espera a primeira no lock da linha, não acha mais nada
+             pendente e desiste antes do lançamento. */
+          const baixa = await tx.payment.updateMany({
+            where: { id: payment.id, status: PaymentStatus.PENDING },
             data: {
               status: PaymentStatus.PAID,
               paymentDate: new Date(),
               discountAmount: discount,
               promotionId: promotion?.id ?? null,
             },
-          }),
-          ctx.prisma.financeEntry.create({
+          });
+
+          if (baixa.count === 0) {
+            throw new TRPCError({
+              code: 'CONFLICT',
+              message: 'Esta parcela acabou de ser paga por outra pessoa.',
+            });
+          }
+
+          await tx.financeEntry.create({
             data: {
               date: new Date(),
               amount,
@@ -239,11 +241,14 @@ export const paymentsRouter = createTRPCRouter({
               categoryId: category.id,
               studentId: student.id,
             },
-          }),
-        ]);
+          });
+        });
 
         return { ok: true };
       } catch (err) {
+        /* Os erros de negócio (parcela já paga, promoção inativa, categoria
+           faltando) já vêm com a mensagem certa; só o inesperado vira 500. */
+        if (err instanceof TRPCError) throw err;
         console.error(err);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
