@@ -76,14 +76,17 @@ enum ECategoryStatus {
 /// Uma academia. Tudo que o sistema guarda pertence a uma, e é por aqui que
 /// os dados de uma não encostam nos da outra.
 model Tenant {
-  id        String        @id @default(uuid())
+  id                    String        @id @default(uuid())
   /// Nome como a academia se chama, usado no sistema e nas telas do master.
-  name      String
+  name                  String
   /// Vira o subdomínio: "thaiboxe" -> thaiboxe.seusistema.com.br
-  slug      String        @unique
-  status    ETenantStatus @default(TRIAL)
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  slug                  String        @unique
+  status                ETenantStatus @default(TRIAL)
+  /// Desconto, em %, da 2ª modalidade em diante de um mesmo aluno. 0 é sem
+  /// desconto: cada modalidade paga o seu valor cheio.
+  multiModalityDiscount Int           @default(0)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
 
   users    User[]
   domains  TenantDomain[]
@@ -303,6 +306,7 @@ model Modality {
 
   graduations Graduation[]
   enrollments Enrollment[]
+  planPrices  PlanModalityPrice[]
 
   @@unique([tenantId, slug])
   @@index([tenantId, position])
@@ -346,10 +350,17 @@ model Plan {
   /// Plano que já vem escolhido ao matricular. No máximo um por academia —
   /// a regra é aplicada em transação no router, não por constraint.
   isDefault   Boolean      @default(false)
+  /// Desativado sai das escolhas de matrícula nova e de troca de plano; quem
+  /// já está nele segue. É o jeito de aposentar um plano usado, que não pode
+  /// ser apagado sem levar o histórico das matrículas.
+  isActive    Boolean      @default(true)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
-  enrollments Enrollment[]
+  enrollments    Enrollment[]
+  /// Valor do plano em cada modalidade. A modalidade que não está aqui usa
+  /// `price`, o preço padrão.
+  modalityPrices PlanModalityPrice[]
 
   /// Dono do dado é a academia; isto aqui é só quem cadastrou.
 
@@ -365,6 +376,25 @@ model Plan {
   /// matricula; em academias diferentes, não há conflito.
   @@unique([tenantId, name])
   @@index([tenantId, isDefault])
+}
+
+/// O valor de um plano numa modalidade: o "Mensal" pode custar R$ 150 no muay
+/// thai e R$ 180 no jiu-jitsu. Mesma regra de `Plan.price`: valor fechado do
+/// período, não da parcela.
+model PlanModalityPrice {
+  id        String   @id @default(uuid())
+  price     Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  planId String
+  plan   Plan   @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  modalityId String
+  modality   Modality @relation(fields: [modalityId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, modalityId])
+  @@index([modalityId])
 }
 
 /// A matrícula do aluno numa modalidade. Uma por modalidade: quem faz muay
@@ -385,6 +415,18 @@ model Enrollment {
   /// está em uso; o banco recusa o resto.
   modalityId String
   modality   Modality @relation(fields: [modalityId], references: [id], onDelete: NoAction)
+
+  /// Valor fechado do período desta matrícula, já com o desconto — a mesma
+  /// regra de `Plan.price`. É o retrato do dia da matrícula: mudar o preço do
+  /// plano depois não reescreve contrato em vigor, e é este valor que o MRR
+  /// soma.
+  price           Float
+  /// Desconto aplicado, em %. 0 é valor cheio.
+  discountPercent Int   @default(0)
+  /// Meses do contrato, também retrato do dia: o MRR divide `price` por
+  /// isto. Dividir pela duração atual do plano mudava o MRR de contratos em
+  /// vigor quando alguém editava o plano.
+  duration        Int
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
   /// NoAction pelo mesmo motivo: excluir um plano apagava as matrículas nele

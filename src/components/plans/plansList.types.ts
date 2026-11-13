@@ -8,7 +8,15 @@ export interface PlanItem {
   duration: number;
   billing: EPlanBilling;
   isDefault: boolean;
+  /** Desativado sai das escolhas de matrícula nova. */
+  isActive: boolean;
   createdAt: string | Date;
+  /** Valores próprios por modalidade; as outras usam `price`. */
+  modalityPrices?: Array<{
+    modalityId: string;
+    price: number;
+    modality: { name: string };
+  }>;
 }
 
 export interface IPlanList {

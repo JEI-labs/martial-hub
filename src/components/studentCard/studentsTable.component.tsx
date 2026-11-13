@@ -284,9 +284,7 @@ export function StudentsTable({
           studentId={changePlanFor.student.id}
           studentName={changePlanFor.student.name}
           enrollment={changePlanFor.enrollment}
-          enrolledModalityIds={changePlanFor.student.activeEnrollments.map(
-            (e) => e.modality.id,
-          )}
+          activeEnrollments={changePlanFor.student.activeEnrollments}
           open={Boolean(changePlanFor)}
           onOpenChange={(open) => !open && setChangePlanFor(null)}
         />

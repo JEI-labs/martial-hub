@@ -14,11 +14,18 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import {
+  comDesconto,
+  descontosDasMatriculas,
+  precoNaModalidade,
+  type ModalityPrice,
+} from '@/common/utils/pricing';
 import type {
   IEnrollmentRequest,
   IStudentCreateTypes,
 } from '@/server/validations/students';
 import { PlanOptionLabel } from '@/components/plans/planOptionLabel.component';
+import { maskBRL } from '@/utils/masksUtils';
 import { Skeleton } from '@/components/ui/skeleton';
 
 type Modalidade = { id: string; name: string };
@@ -28,6 +35,7 @@ type Plano = {
   price: number;
   duration: number;
   billing: keyof typeof PLAN_BILLING_LABEL;
+  modalityPrices?: Array<ModalityPrice>;
 };
 
 interface EnrollmentsFieldProps {
@@ -41,6 +49,8 @@ interface EnrollmentsFieldProps {
   tentarDeNovo?: () => void;
   planos: Array<Plano>;
   defaultPlanId?: string;
+  /** Desconto da academia da 2ª modalidade em diante, em %. */
+  desconto: number;
   open: boolean;
   error?: string;
 }
@@ -59,6 +69,7 @@ export function EnrollmentsField({
   tentarDeNovo,
   planos,
   defaultPlanId,
+  desconto,
   open,
   error,
 }: EnrollmentsFieldProps) {
@@ -143,6 +154,29 @@ export function EnrollmentsField({
         : escolhidas.filter((e) => e.modalityId !== modalityId),
     );
 
+  /* A mesma conta do servidor: cheio na mais cara pelo valor mensal,
+     desconto nas outras. */
+  const novas = escolhidas.map((e) => {
+    const plano = planos.find((p) => p.id === e.planId);
+    return {
+      preco: plano ? precoNaModalidade(plano, e.modalityId) : 0,
+      duracao: plano?.duration ?? 1,
+    };
+  });
+  const cheios = novas.map((n) => n.preco);
+  const descontos = descontosDasMatriculas(novas, [], desconto);
+  const valorDe = (modalityId: string) => {
+    const index = escolhidas.findIndex((e) => e.modalityId === modalityId);
+    const plano = planos.find((p) => p.id === escolhidas[index]?.planId);
+    if (index < 0 || !plano) return null;
+    const percent = descontos[index] ?? 0;
+    return {
+      valor: comDesconto(cheios[index] ?? 0, percent),
+      percent,
+      duration: plano.duration,
+    };
+  };
+
   const trocarPlano = (modalityId: string, planId: string) =>
     gravar(
       escolhidas.map((e) =>
@@ -197,12 +231,30 @@ export function EnrollmentsField({
                   <SelectContent>
                     {planos.map((plano) => (
                       <SelectItem key={plano.id} value={plano.id}>
-                        <PlanOptionLabel plan={plano} />
+                        <PlanOptionLabel
+                          plan={plano}
+                          preco={precoNaModalidade(plano, modalidade.id)}
+                        />
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               )}
+
+              {(() => {
+                const valor = escolhida ? valorDe(modalidade.id) : null;
+                if (!valor) return null;
+                return (
+                  <p className="text-muted-foreground w-full pl-7 text-xs">
+                    {maskBRL(valor.valor, true)}
+                    {valor.duration > 1
+                      ? ` pelos ${valor.duration} meses`
+                      : ' por mês'}
+                    {valor.percent > 0 &&
+                      ` · ${valor.percent}% de desconto de 2ª modalidade`}
+                  </p>
+                );
+              })()}
             </div>
           );
         })}
@@ -211,6 +263,8 @@ export function EnrollmentsField({
       <p className="text-muted-foreground text-xs">
         Cada modalidade marcada vira uma matrícula, com o plano e as parcelas
         dela.
+        {desconto > 0 &&
+          ` Da 2ª modalidade em diante, ${desconto}% de desconto — a mais cara paga cheio.`}
       </p>
       {error && <p className="text-destructive-text text-sm">{error}</p>}
     </div>

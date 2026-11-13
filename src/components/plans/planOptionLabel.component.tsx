@@ -14,11 +14,18 @@ export interface PlanOption {
  * texto no cadastro do aluno e na troca de plano — duas cópias saíam de
  * sincronia na primeira mudança.
  */
-export function PlanOptionLabel({ plan }: { plan: PlanOption }) {
+export function PlanOptionLabel({
+  plan,
+  preco,
+}: {
+  plan: PlanOption;
+  /** O preço na modalidade escolhida, quando ela tem preço próprio. */
+  preco?: number;
+}) {
   return (
     <>
-      {plan.name} · {maskBRL(Number(plan.price), true)} · {plan.duration}{' '}
-      {plan.duration === 1 ? 'mês' : 'meses'} ·{' '}
+      {plan.name} · {maskBRL(preco ?? Number(plan.price), true)} ·{' '}
+      {plan.duration} {plan.duration === 1 ? 'mês' : 'meses'} ·{' '}
       {PLAN_BILLING_LABEL[plan.billing]}
     </>
   );

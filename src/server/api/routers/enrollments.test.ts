@@ -575,7 +575,8 @@ describe('datas da matrícula', () => {
       matricular(tx, {
         student: aluno,
         modality: a.boxe,
-        plan: a.trimestral,
+        plan: { ...a.trimestral, modalityPrices: [] },
+        discountPercent: 0,
         startDate: inicio,
         userId: usuario.id,
         tenantId: a.tenantId,

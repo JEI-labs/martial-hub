@@ -16,6 +16,8 @@ import PlansList from '@/components/plans/plansList.component';
 import { SheetEditPlan } from '@/components/modals/plans/editPlan/sheetEditPlan.component';
 import { SheetCreatePlan } from '@/components/modals/plans/createPlan/sheetCreatePlan.component';
 import { toast } from '@/hooks/use-toast';
+import { useSession } from 'next-auth/react';
+import { MultiModalityDiscountCard } from '@/components/plans/multiModalityDiscountCard.component';
 
 const breadcrumbItems = [
   { label: 'Home', href: '/painel' },
@@ -24,6 +26,7 @@ const breadcrumbItems = [
 ];
 
 export default function PlansPage() {
+  const { data: session } = useSession();
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -48,7 +51,18 @@ export default function PlansPage() {
   useResetOnChange([debouncedSearch, limit], () => setPage(1));
 
   const handleDelete = async (id: string) => {
-    await deleteMutation.mutateAsync({ id });
+    try {
+      await deleteMutation.mutateAsync({ id });
+    } catch (err) {
+      /* Plano em uso não é apagado; a mensagem diz quantas matrículas. */
+      toast({
+        title: 'Não deu para apagar',
+        description:
+          err instanceof Error ? err.message : 'Erro ao apagar o plano',
+        variant: 'destructive',
+      });
+      return;
+    }
     setEditId(null);
     await refetch();
     toast({
@@ -76,6 +90,12 @@ export default function PlansPage() {
               <Plus className="mr-2 size-4" />
               Criar plano
             </Button>
+          }
+        />
+
+        <MultiModalityDiscountCard
+          podeEditar={
+            session?.user.role === 'OWNER' || session?.user.role === 'MASTER'
           }
         />
 
