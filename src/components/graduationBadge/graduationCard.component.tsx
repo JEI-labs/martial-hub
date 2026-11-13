@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { Award, Pencil } from 'lucide-react';
+import { Award, Loader2, Pencil, RotateCw } from 'lucide-react';
 
 import {
   GraduationBadge,
   descreverGraduacao,
   type GraduationView,
 } from './graduationBadge.component';
+import { useFaixasDisponiveis } from './useFaixasDisponiveis';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -18,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/trpc/react';
@@ -39,15 +41,14 @@ export function GraduationCard({
     graduation?.id ?? null,
   );
 
-  const { data: modalidades } = api.graduations.list.useQuery(undefined, {
-    staleTime: 5 * 60 * 1000,
-  });
-
-  /* Só as modalidades que têm faixa: boxe não tem o que escolher. */
-  const comFaixas = (modalidades ?? []).filter(
-    (modalidade) => modalidade.graduations.length > 0,
-  );
-  const variasModalidades = comFaixas.length > 1;
+  const {
+    modalidades: comFaixas,
+    variasModalidades,
+    isLoading,
+    isError,
+    isFetching,
+    refetch,
+  } = useFaixasDisponiveis();
 
   const { mutate, isPending } = api.student.updateGraduation.useMutation({
     onSuccess: () => {
@@ -63,10 +64,22 @@ export function GraduationCard({
       }),
   });
 
+  /* Carregando, o cartão guarda o lugar em vez de sumir e voltar: a
+     graduação do aluno é informação, não enfeite. */
+  if (isLoading) return <Skeleton className="h-36 w-full lg:w-72" />;
+
   /* Academia sem nenhuma modalidade com faixa (só boxe, ou modalidades ainda
      pendentes) não tem graduação para dar: o cartão some em vez de oferecer
-     uma lista vazia. Quem já tem faixa continua vendo a sua. */
-  if (!modalidades || (comFaixas.length === 0 && !graduation)) return null;
+     uma lista vazia. Quem já tem faixa continua vendo a sua — e com a
+     consulta falhando o cartão fica, com o erro, porque aí não dá para
+     saber se há faixas. */
+  if (!isError && comFaixas.length === 0 && !graduation) return null;
+
+  /* Faixa de modalidade que não está mais na lista (desativada): o nome dela
+     é o que diz de onde a faixa veio. */
+  const modalidadeForaDaLista =
+    !!graduation?.modality &&
+    !comFaixas.some((m) => m.name === graduation.modality?.name);
 
   // reabrir depois de cancelar deve mostrar a graduação salva, não a escolha
   // abandonada da vez anterior
@@ -82,7 +95,8 @@ export function GraduationCard({
           <div className="space-y-2">
             <p className="text-muted-foreground text-xs uppercase">
               Graduação
-              {graduation?.modality && variasModalidades
+              {graduation?.modality &&
+              (variasModalidades || modalidadeForaDaLista)
                 ? ` · ${graduation.modality.name}`
                 : ''}
             </p>
@@ -96,7 +110,30 @@ export function GraduationCard({
             )}
           </div>
 
-          {comFaixas.length > 0 && (
+          {isError ? (
+            <div className="space-y-2">
+              <p className="text-muted-foreground text-xs">
+                Não deu para carregar as faixas da academia.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                disabled={isFetching}
+                onClick={() => void refetch()}
+              >
+                {isFetching ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RotateCw className="mr-2 h-4 w-4" />
+                )}
+                Tentar de novo
+              </Button>
+            </div>
+          ) : (
+            /* Com faixa, o botão aparece mesmo sem nenhuma modalidade ativa
+               com faixas: é por ele que se remove a faixa de uma modalidade
+               desativada — e só sem ela a modalidade pode ser apagada. */
             <Button
               variant={graduation ? 'outline' : 'default'}
               size="sm"
@@ -124,9 +161,11 @@ export function GraduationCard({
           <DialogHeader>
             <DialogTitle>Graduação do aluno</DialogTitle>
             <DialogDescription>
-              {variasModalidades
-                ? 'Selecione a faixa, na modalidade correspondente.'
-                : `Selecione a faixa de ${comFaixas[0]?.name ?? 'graduação'}.`}
+              {comFaixas.length === 0
+                ? 'Nenhuma modalidade ativa tem faixas para escolher. Dá para remover a graduação atual, ou reativar a modalidade dela em Cadastros › Modalidades.'
+                : variasModalidades
+                  ? 'Selecione a faixa, na modalidade correspondente.'
+                  : `Selecione a faixa de ${comFaixas[0]?.name ?? 'graduação'}.`}
             </DialogDescription>
           </DialogHeader>
 
@@ -156,9 +195,11 @@ export function GraduationCard({
                       <span className="block truncate text-sm">
                         {faixa.name}
                       </span>
-                      <span className="text-muted-foreground block text-xs">
-                        {descreverGraduacao(faixa)}
-                      </span>
+                      {descreverGraduacao(faixa) && (
+                        <span className="text-muted-foreground block text-xs">
+                          {descreverGraduacao(faixa)}
+                        </span>
+                      )}
                     </span>
                   </button>
                 ))}

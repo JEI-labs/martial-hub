@@ -23,6 +23,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { grauDaFaixa } from '@/common/constants/graduations';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   ChartContainer,
@@ -598,7 +599,8 @@ export function GraduationChart({
   } satisfies ChartConfig;
 
   /* Com mais de uma modalidade, "4º" sozinho é ambíguo: o eixo ganha a sigla
-     dela (MT 4º, JJ 2º) e o tooltip, o nome inteiro. */
+     dela (MT 4º, JJ Azul) e o tooltip, o nome inteiro. O grau só existe no
+     Muay Thai; nas outras, o eixo mostra o nome da faixa. */
   const variasModalidades =
     new Set(byGraduation.map((item) => item.modality).filter(Boolean)).size > 1;
   const sigla = (nome: string) =>
@@ -611,18 +613,19 @@ export function GraduationChart({
 
   const data = byGraduation.map((item) => {
     const isNone = item.name === null;
-    const grau = `${item.position + 1}º`;
+    const grau = grauDaFaixa(item, item.modalitySlug);
+    const curto = grau ? grau.replace(' grau', '') : (item.name ?? '');
 
     return {
       ...item,
       label: isNone
         ? 'Sem graduação'
         : variasModalidades && item.modality
-          ? `${sigla(item.modality)} ${grau}`
-          : grau,
+          ? `${sigla(item.modality)} ${curto}`
+          : curto,
       full: isNone
         ? 'Sem graduação'
-        : [variasModalidades ? item.modality : null, item.name]
+        : [variasModalidades ? item.modality : null, grau, item.name]
             .filter(Boolean)
             .join(' · '),
     };
