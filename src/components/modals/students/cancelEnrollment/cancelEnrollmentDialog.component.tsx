@@ -16,23 +16,29 @@ import { useToast } from '@/hooks/use-toast';
 import { api } from '@/trpc/react';
 
 interface CancelEnrollmentDialogProps {
-  studentId: string;
+  enrollmentId: string;
   studentName: string;
+  modalityName: string;
   planName?: string | null;
+  /** Quantas outras matrículas ativas o aluno tem, que continuam. */
+  otherActive?: number;
   open: boolean;
   onOpenChange: (_open: boolean) => void;
   onCancelled?: () => void;
 }
 
 /**
- * Cancelamento da matrícula. Não é o diálogo de exclusão genérico porque o que
- * acontece aqui é específico e precisa estar escrito: o aluno fica, as
- * parcelas futuras somem, as atrasadas continuam.
+ * Cancelamento de uma matrícula — uma modalidade. Não é o diálogo de exclusão
+ * genérico porque o que acontece aqui é específico e precisa estar escrito: o
+ * aluno fica, as outras modalidades seguem, as parcelas futuras desta somem e
+ * as atrasadas continuam.
  */
 export function CancelEnrollmentDialog({
-  studentId,
+  enrollmentId,
   studentName,
+  modalityName,
   planName,
+  otherActive = 0,
   open,
   onOpenChange,
   onCancelled,
@@ -68,22 +74,33 @@ export function CancelEnrollmentDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Cancelar matrícula</AlertDialogTitle>
+          <AlertDialogTitle>
+            Cancelar matrícula em {modalityName}
+          </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-3">
               <p>
                 {studentName}
-                {planName ? ` está no plano ${planName}.` : '.'} A matrícula
-                encerra hoje.
+                {planName
+                  ? ` está em ${modalityName} no plano ${planName}.`
+                  : ` está em ${modalityName}.`}{' '}
+                A matrícula encerra hoje.
               </p>
 
               <ul className="space-y-1">
                 <li>
                   O aluno continua cadastrado, com o histórico de pagamentos.
                 </li>
+                {otherActive > 0 && (
+                  <li>
+                    {otherActive === 1
+                      ? 'A outra modalidade dele continua como está.'
+                      : `As outras ${otherActive} modalidades dele continuam como estão.`}
+                  </li>
+                )}
                 <li>
-                  Parcelas ainda não vencidas são canceladas; as atrasadas
-                  continuam a ser cobradas.
+                  Parcelas ainda não vencidas de {modalityName} são canceladas;
+                  as atrasadas continuam a ser cobradas.
                 </li>
                 <li>
                   Nada é devolvido automaticamente — se houver reembolso, lance
@@ -102,7 +119,7 @@ export function CancelEnrollmentDialog({
           <Button
             variant="destructive"
             disabled={cancel.isPending}
-            onClick={() => cancel.mutate({ studentId })}
+            onClick={() => cancel.mutate({ enrollmentId })}
           >
             {cancel.isPending && (
               <Loader2 className="mr-2 size-4 animate-spin" />

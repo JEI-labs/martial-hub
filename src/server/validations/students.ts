@@ -1,10 +1,18 @@
 import { z } from 'zod';
 
-export const createStudentSchema = z.object({
+/** Uma matrícula pedida no cadastro: a modalidade e o plano dela. */
+export const enrollmentRequestSchema = z.object({
+  modalityId: z.string().uuid('Escolha a modalidade'),
+  planId: z.string().uuid('Selecione um plano'),
+});
+
+export type IEnrollmentRequest = z.infer<typeof enrollmentRequestSchema>;
+
+/** Os dados da pessoa, sem matrícula: o que cadastro e edição dividem. */
+const studentDataSchema = z.object({
   name: z.string().min(1, 'Por favor, insira um nome válido.'),
   email: z.string().email('Por favor, insira um endereço de email válido.'),
   phone: z.string().min(10, 'Por favor, insira um telefone válido'),
-  planId: z.string().uuid('Selecione um plano'),
   avatarUrl: z.string().nullable(),
   /* Opcional: nem todo aluno novo já tem graduação definida. Ausente quer
      dizer "não mexer" — a edição do aluno não manda este campo, e tratá-lo
@@ -47,12 +55,30 @@ export const createStudentSchema = z.object({
   }),
 });
 
+/**
+ * Cadastro: os dados da pessoa e ao menos uma matrícula, uma por modalidade.
+ */
+export const createStudentSchema = studentDataSchema.extend({
+  enrollments: z
+    .array(enrollmentRequestSchema)
+    .min(1, 'Matricule o aluno em ao menos uma modalidade')
+    .refine(
+      (lista) => new Set(lista.map((e) => e.modalityId)).size === lista.length,
+      'A mesma modalidade apareceu duas vezes',
+    ),
+});
+
 export const updateAvatarSchema = z.object({
   avatarUrl: z.string().nullable(),
   studentId: z.string().min(1, 'Por favor, insira um ID válido'),
 });
 
-export const updateStudentSchema = createStudentSchema.extend({
+/**
+ * Sem matrícula: a edição mexe só nos dados da pessoa. Matricular, trocar de
+ * plano e cancelar têm ações próprias, por modalidade. (Antes a edição
+ * herdava o plano obrigatório do cadastro sem ter o campo na tela.)
+ */
+export const updateStudentSchema = studentDataSchema.extend({
   id: z.string({ message: 'ID da categoria é inválido' }),
 });
 
@@ -64,7 +90,7 @@ export const defaultCreateStudentValues = {
   email: '',
   phone: '',
   avatarUrl: '',
-  planId: '',
+  enrollments: [] as Array<IEnrollmentRequest>,
   graduationId: null,
   birthDate: undefined,
 };

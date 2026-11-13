@@ -163,7 +163,7 @@ export function ExpiringEnrollmentsList({
               {enrollment.studentName}
             </Link>
             <p className="text-muted-foreground text-xs">
-              {enrollment.planName}
+              {enrollment.modalityName} · {enrollment.planName}
             </p>
           </div>
           <Badge

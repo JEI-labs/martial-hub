@@ -123,7 +123,7 @@ export default function StudentPaymentsPage({
 
       {isLoading ? (
         <div className="mt-6">
-          <ListSkeleton columns={5} />
+          <ListSkeleton columns={6} />
         </div>
       ) : (
         <>
@@ -134,6 +134,7 @@ export default function StudentPaymentsPage({
                   <TableHeader>
                     <TableRow>
                       <TableHead>Vencimento</TableHead>
+                      <TableHead>Modalidade</TableHead>
                       <TableHead className="text-right">Valor</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Pago em</TableHead>
@@ -151,6 +152,9 @@ export default function StudentPaymentsPage({
                       return (
                         <TableRow key={payment.id}>
                           <TableCell>{formatDate(payment.dueDate)}</TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {payment.enrollment?.modality.name ?? '—'}
+                          </TableCell>
                           <TableCell className="text-right">
                             {formatMoney(Number(payment.amount))}
                           </TableCell>
@@ -183,12 +187,7 @@ export default function StudentPaymentsPage({
                                 variant="outline"
                                 disabled={isRegistering}
                                 onClick={() =>
-                                  registerPayment({
-                                    studentId: id,
-                                    dueDate: new Date(
-                                      payment.dueDate,
-                                    ).toISOString(),
-                                  })
+                                  registerPayment({ paymentId: payment.id })
                                 }
                               >
                                 <CreditCard className="mr-2 h-4 w-4" />

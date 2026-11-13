@@ -302,6 +302,7 @@ model Modality {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   graduations Graduation[]
+  enrollments Enrollment[]
 
   @@unique([tenantId, slug])
   @@index([tenantId, position])
@@ -366,6 +367,9 @@ model Plan {
   @@index([tenantId, isDefault])
 }
 
+/// A matrícula do aluno numa modalidade. Uma por modalidade: quem faz muay
+/// thai e boxe tem duas, cada uma com o seu plano, o seu período e as suas
+/// parcelas — cancelar o boxe não mexe no muay thai.
 model Enrollment {
   id        String   @id @default(uuid())
   studentId String
@@ -376,8 +380,27 @@ model Enrollment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// NoAction, e não Cascade: apagar uma modalidade levaria junto o
+  /// histórico de matrícula de quem a fez. O router só deixa desativar a que
+  /// está em uso; o banco recusa o resto.
+  modalityId String
+  modality   Modality @relation(fields: [modalityId], references: [id], onDelete: NoAction)
+
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  plan    Plan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  /// NoAction pelo mesmo motivo: excluir um plano apagava as matrículas nele
+  /// e soltava as parcelas delas. (Restrict barraria a exclusão da academia,
+  /// que apaga planos e matrículas no mesmo comando.)
+  plan    Plan    @relation(fields: [planId], references: [id], onDelete: NoAction)
+
+  payments Payment[]
+
+  /// Também existe, só no SQL da migration `enrollment_per_modality`, o
+  /// índice único parcial `Enrollment_studentId_modalityId_active_key`:
+  /// (studentId, modalityId) WHERE isActive — uma matrícula ativa por aluno
+  /// e modalidade. O Prisma não descreve índice parcial, mas também não o
+  /// apaga: o `migrate diff` contra este schema sai vazio.
+  @@index([studentId, isActive])
+  @@index([modalityId])
 }
 
 model Payment {
@@ -394,8 +417,18 @@ model Payment {
   studentId String
   student   Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
+  /// A matrícula que gerou a parcela. É o que permite cancelar ou trocar o
+  /// plano de uma modalidade sem mexer nas parcelas das outras. Opcional só
+  /// para não travar parcela avulsa; toda parcela gerada por matrícula tem.
+  enrollmentId String?
+  /// SetNull: parcela é dinheiro, e o histórico dela não some junto com a
+  /// matrícula.
+  enrollment   Enrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+
   promotionId String?
   promotion   Promotion? @relation(fields: [promotionId], references: [id], onDelete: SetNull)
+
+  @@index([enrollmentId])
 }
 
 model Expense {

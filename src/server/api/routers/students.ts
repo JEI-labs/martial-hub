@@ -7,6 +7,7 @@ import {
 
 import {
   createStudentSchema,
+  enrollmentRequestSchema,
   updateAvatarSchema,
   updateStudentSchema,
 } from '@/server/validations/students';
@@ -14,24 +15,22 @@ import { convertToDate } from '@/utils/converterUtils';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { del } from '@vercel/blob';
-import {
-  EFinanceEntryStatus,
-  EFinanceEntryType,
-  EPaymentMethod,
-  EPlanBilling,
-  PaymentStatus,
-  Prisma,
-} from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { getAllStudentInputSchema } from '@/server/validations/pagination';
 import {
   conferirGraduacao,
   graduationSelect,
   traduzirFaixaSumida,
 } from '@/server/graduations';
+import {
+  categoriaDeAlunos,
+  conferirModalidadeEPlano,
+  encerrarMatricula,
+  enrollmentInclude,
+  enrollmentModalitySelect,
+  matricular,
+} from '@/server/enrollments';
 import { deriveStudentStatus } from '@/server/utils/studentStatus';
-import { installmentCount, splitIntoInstallments } from '@/utils/planUtils';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 
 export const studentRouter = createTRPCRouter({
   create: staffProcedure
@@ -46,7 +45,6 @@ export const studentRouter = createTRPCRouter({
         });
       }
 
-      // Formata datas e define início
       const birthDateFormatted = convertToDate(input.birthDate);
       const startDate = new Date();
 
@@ -64,20 +62,16 @@ export const studentRouter = createTRPCRouter({
 
       await conferirGraduacao(ctx.prisma, tenantId, input.graduationId);
 
-      // 2) Carrega o plano
-      const plan = await ctx.prisma.plan.findUnique({
-        where: { id: input.planId },
-      });
-      if (!plan) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'Plano não encontrado',
-        });
-      }
+      // 2) Cada matrícula pedida: modalidade e plano desta academia
+      const pedidas = await Promise.all(
+        input.enrollments.map((pedido) =>
+          conferirModalidadeEPlano(ctx.prisma, tenantId, pedido),
+        ),
+      );
+      const category = await categoriaDeAlunos(ctx.prisma, tenantId);
 
       try {
         const createdStudent = await ctx.prisma.$transaction(async (tx) => {
-          // 3. Criação do aluno
           const student = await tx.student.create({
             data: {
               email: input.email,
@@ -91,79 +85,19 @@ export const studentRouter = createTRPCRouter({
             },
           });
 
-          // 4. Criação da matrícula
-          await tx.enrollment.create({
-            data: {
-              studentId: student.id,
-              planId: plan.id,
+          /* 3) Uma matrícula por modalidade, cada uma com o seu plano e as
+                suas parcelas. */
+          for (const { modality, plan } of pedidas) {
+            await matricular(tx, {
+              student,
+              modality,
+              plan,
               startDate,
-              endDate: new Date(
-                new Date(startDate).setMonth(
-                  startDate.getMonth() + plan.duration,
-                ),
-              ),
-            },
-          });
-
-          /* 5. Geração dos pagamentos.
-
-             Plano mensal: uma parcela por mês de duração, a primeira já paga
-             na matrícula. Plano à vista: uma parcela só, com o período
-             inteiro — quem paga o trimestre adiantado não tem mensalidade
-             vencendo no meio dele, e a próxima cobrança é a renovação. */
-          const amounts = splitIntoInstallments(
-            plan.price,
-            installmentCount(plan.duration, plan.billing),
-          );
-
-          const payments = amounts.map((cents, i) => {
-            const dueDate = new Date(startDate);
-            dueDate.setMonth(dueDate.getMonth() + i);
-            return {
-              studentId: student.id,
-              amount: cents / 100,
-              dueDate,
-              status: i === 0 ? PaymentStatus.PAID : PaymentStatus.PENDING,
-            };
-          });
-          await tx.payment.createMany({ data: payments });
-
-          // 6. Busca da categoria fixa do usuário
-          const category = await tx.category.findFirst({
-            where: {
-              tenantId,
-              isFixed: true,
-              name: { equals: 'Alunos', mode: 'insensitive' },
-            },
-          });
-          if (!category?.id) {
-            throw new TRPCError({
-              code: 'NOT_FOUND',
-              message: 'Categoria fixa não encontrada para criação do aluno',
-            });
-          }
-
-          const firstDueDate = format(startDate, 'MMMM/yyyy', { locale: ptBR });
-          const isUpfront = plan.billing === EPlanBilling.UPFRONT;
-
-          // 7. Criação da entrada financeira (só o que foi pago agora)
-          await tx.financeEntry.create({
-            data: {
-              amount: amounts[0] ?? 0,
-              date: startDate,
-              type: EFinanceEntryType.STUDENTS,
-              description: isUpfront
-                ? `${plan.name} de ${student.name} pago à vista (${plan.duration} ${plan.duration === 1 ? 'mês' : 'meses'} a partir de ${firstDueDate}).`
-                : `Parcela 1 de ${student.name} com vencimento em ${firstDueDate}.`,
-              status: PaymentStatus.PAID,
-              currency: 'BRL',
-              paymentMethod: EPaymentMethod.CREDIT_CARD,
               userId,
               tenantId,
               categoryId: category.id,
-              studentId: student.id,
-            },
-          });
+            });
+          }
 
           return student;
         });
@@ -178,6 +112,71 @@ export const studentRouter = createTRPCRouter({
           message: 'Não foi possível cadastrar aluno',
         });
       }
+    }),
+
+  /**
+   * Matricula um aluno que já existe em mais uma modalidade — ou de volta
+   * numa que ele tinha cancelado. Uma matrícula ativa por modalidade: para
+   * mudar o plano da que já existe, é a troca de plano.
+   */
+  addEnrollment: staffProcedure
+    .input(enrollmentRequestSchema.extend({ studentId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const userId = ctx.session.user.id;
+      const { tenantId } = ctx;
+
+      const student = await ctx.prisma.student.findFirst({
+        where: { id: input.studentId, tenantId },
+        select: { id: true, name: true },
+      });
+
+      if (!student) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Aluno não encontrado',
+        });
+      }
+
+      const { modality, plan } = await conferirModalidadeEPlano(
+        ctx.prisma,
+        tenantId,
+        input,
+      );
+      const category = await categoriaDeAlunos(ctx.prisma, tenantId);
+
+      return ctx.prisma.$transaction(async (tx) => {
+        /* A mensagem amigável para o caso comum. Quem garante de verdade é
+           o índice único parcial em (studentId, modalityId) das ativas: no
+           READ COMMITTED, dois pedidos simultâneos passam os dois por esta
+           busca, e o segundo insert é recusado (ver `matricular`). */
+        const jaTem = await tx.enrollment.findFirst({
+          where: {
+            studentId: student.id,
+            modalityId: modality.id,
+            isActive: true,
+          },
+          select: { id: true },
+        });
+
+        if (jaTem) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `${student.name} já está matriculado em ${modality.name}. Para mudar o plano, use a troca de plano.`,
+          });
+        }
+
+        const { enrollment, installments } = await matricular(tx, {
+          student,
+          modality,
+          plan,
+          startDate: new Date(),
+          userId,
+          tenantId,
+          categoryId: category.id,
+        });
+
+        return { ok: true, enrollmentId: enrollment.id, installments };
+      });
     }),
 
   updateAvatar: staffProcedure
@@ -396,7 +395,8 @@ export const studentRouter = createTRPCRouter({
               payments: true,
               enrollments: {
                 where: { isActive: true },
-                include: { plan: true },
+                include: enrollmentInclude,
+                orderBy: { modality: { position: 'asc' } },
               },
               graduation: { select: graduationSelect },
             },
@@ -411,21 +411,24 @@ export const studentRouter = createTRPCRouter({
         // Montar status calculado para cada aluno
         const now = new Date();
         const result = students.map((student) => {
-          const activeEnrollment = student.enrollments.find((e) => e.isActive);
-
           const status = deriveStudentStatus(
             student.payments,
-            activeEnrollment,
+            student.enrollments,
             now,
           );
 
           return {
             ...student,
             status,
-            planName: activeEnrollment?.plan?.name ?? 'Sem plano',
-            /* A lista oferece a troca de plano, e para isso precisa saber
-               qual é o de agora — senão ele apareceria entre as opções. */
-            planId: activeEnrollment?.planId ?? null,
+            /* O que o aluno faz, modalidade a modalidade: a lista mostra e
+               oferece a troca de plano de cada uma. */
+            activeEnrollments: student.enrollments.map((e) => ({
+              id: e.id,
+              modality: e.modality,
+              planId: e.planId,
+              planName: e.plan.name,
+              endDate: e.endDate,
+            })),
           };
         });
 
@@ -478,10 +481,15 @@ export const studentRouter = createTRPCRouter({
         where: { id: input.id, tenantId },
         include: {
           enrollments: {
-            include: { plan: true },
+            include: enrollmentInclude,
             orderBy: { startDate: 'desc' },
           },
-          payments: { orderBy: { dueDate: 'asc' } },
+          payments: {
+            orderBy: { dueDate: 'asc' },
+            include: {
+              enrollment: { select: enrollmentModalitySelect },
+            },
+          },
           FinanceEntry: {
             include: { category: true },
             orderBy: { date: 'desc' },
@@ -497,8 +505,11 @@ export const studentRouter = createTRPCRouter({
         });
       }
 
-      const activeEnrollment =
-        student.enrollments.find((e) => e.isActive) ?? null;
+      /* As ativas na ordem das modalidades da academia: é a ordem em que a
+         ficha mostra. */
+      const activeEnrollments = student.enrollments
+        .filter((e) => e.isActive)
+        .sort((x, y) => x.modality.position - y.modality.position);
 
       const paid = student.payments.filter((p) => p.status === 'PAID');
       const pending = student.payments.filter((p) => p.status === 'PENDING');
@@ -510,9 +521,8 @@ export const studentRouter = createTRPCRouter({
       return {
         data: {
           ...student,
-          status: deriveStudentStatus(student.payments, activeEnrollment),
-          activeEnrollment,
-          planName: activeEnrollment?.plan?.name ?? 'Sem plano',
+          status: deriveStudentStatus(student.payments, activeEnrollments),
+          activeEnrollments,
           totals: {
             paidCount: paid.length,
             pendingCount: pending.length,
@@ -559,17 +569,16 @@ export const studentRouter = createTRPCRouter({
     }),
 
   /**
-   * Troca o plano do aluno valendo de hoje.
+   * Troca o plano de uma matrícula valendo de hoje, sem mexer nas outras
+   * modalidades do aluno.
    *
-   * A matrícula atual é encerrada na data de hoje e uma nova começa no plano
-   * escolhido — o histórico guarda as duas, então dá para ver quando o aluno
-   * mudou. As parcelas ainda por vencer do plano antigo somem: elas eram a
-   * cobrança de um contrato que não existe mais. As vencidas ficam, porque são
-   * aula que o aluno já teve e não pagou, e sumir com elas seria a academia
-   * perdoar uma dívida sem ninguém pedir.
+   * A matrícula atual é encerrada na data de hoje e uma nova começa na mesma
+   * modalidade, no plano escolhido — o histórico guarda as duas, então dá
+   * para ver quando o aluno mudou. As parcelas ainda por vencer da matrícula
+   * velha somem; as vencidas ficam (ver `encerrarMatricula`).
    */
   changePlan: staffProcedure
-    .input(z.object({ studentId: z.string(), planId: z.string() }))
+    .input(z.object({ enrollmentId: z.string(), planId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       const userId = ctx.session.user.id;
       const { tenantId } = ctx;
@@ -580,24 +589,35 @@ export const studentRouter = createTRPCRouter({
         });
       }
 
-      const student = await ctx.prisma.student.findFirst({
-        where: { id: input.studentId, tenantId },
+      const current = await ctx.prisma.enrollment.findFirst({
+        where: {
+          id: input.enrollmentId,
+          isActive: true,
+          student: { tenantId },
+        },
         include: {
-          enrollments: { where: { isActive: true }, include: { plan: true } },
+          student: { select: { id: true, name: true } },
+          modality: { select: { id: true, name: true, isActive: true } },
         },
       });
 
-      if (!student) {
+      if (!current) {
         throw new TRPCError({
           code: 'NOT_FOUND',
-          message: 'Aluno não encontrado',
+          message: 'Matrícula ativa não encontrada',
+        });
+      }
+
+      if (current.planId === input.planId) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'O aluno já está neste plano.',
         });
       }
 
       const plan = await ctx.prisma.plan.findFirst({
         where: { id: input.planId, tenantId },
       });
-
       if (!plan) {
         throw new TRPCError({
           code: 'NOT_FOUND',
@@ -605,104 +625,32 @@ export const studentRouter = createTRPCRouter({
         });
       }
 
-      const current = student.enrollments[0];
-      if (current?.planId === plan.id) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: 'O aluno já está neste plano.',
-        });
-      }
-
-      const category = await ctx.prisma.category.findFirst({
-        where: {
-          tenantId,
-          isFixed: true,
-          name: { equals: 'Alunos', mode: 'insensitive' },
-        },
-      });
-
-      if (!category?.id) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Categoria "Alunos" não encontrada',
-        });
-      }
-
+      const category = await categoriaDeAlunos(ctx.prisma, tenantId);
       const startDate = new Date();
 
       try {
         const result = await ctx.prisma.$transaction(async (tx) => {
-          await tx.enrollment.updateMany({
-            where: { studentId: student.id, isActive: true },
-            data: { isActive: false, endDate: startDate },
+          const cancelled = await encerrarMatricula(tx, current.id, startDate);
+
+          /* Mesma modalidade, mesmo que ela tenha sido desativada depois: a
+             troca de plano continua o contrato, não é matrícula nova. */
+          const { installments } = await matricular(tx, {
+            student: current.student,
+            modality: current.modality,
+            plan,
+            startDate,
+            userId,
+            tenantId,
+            categoryId: category.id,
+            motivo: 'na troca de plano',
           });
 
-          const cancelled = await tx.payment.deleteMany({
-            where: {
-              studentId: student.id,
-              status: PaymentStatus.PENDING,
-              dueDate: { gte: startDate },
-            },
-          });
-
-          await tx.enrollment.create({
-            data: {
-              studentId: student.id,
-              planId: plan.id,
-              startDate,
-              endDate: new Date(
-                new Date(startDate).setMonth(
-                  startDate.getMonth() + plan.duration,
-                ),
-              ),
-            },
-          });
-
-          const amounts = splitIntoInstallments(
-            plan.price,
-            installmentCount(plan.duration, plan.billing),
-          );
-
-          await tx.payment.createMany({
-            data: amounts.map((cents, index) => {
-              const dueDate = new Date(startDate);
-              dueDate.setMonth(dueDate.getMonth() + index);
-              return {
-                studentId: student.id,
-                amount: cents / 100,
-                dueDate,
-                status:
-                  index === 0 ? PaymentStatus.PAID : PaymentStatus.PENDING,
-              };
-            }),
-          });
-
-          const firstDueDate = format(startDate, 'MMMM/yyyy', { locale: ptBR });
-          const isUpfront = plan.billing === EPlanBilling.UPFRONT;
-
-          await tx.financeEntry.create({
-            data: {
-              amount: amounts[0] ?? 0,
-              date: startDate,
-              type: EFinanceEntryType.STUDENTS,
-              description: isUpfront
-                ? `${plan.name} de ${student.name} pago à vista na troca de plano (${plan.duration} ${plan.duration === 1 ? 'mês' : 'meses'} a partir de ${firstDueDate}).`
-                : `Parcela 1 de ${student.name} no plano ${plan.name} com vencimento em ${firstDueDate}.`,
-              status: EFinanceEntryStatus.PAID,
-              currency: 'BRL',
-              paymentMethod: EPaymentMethod.CREDIT_CARD,
-              userId,
-              tenantId,
-              categoryId: category.id,
-              studentId: student.id,
-            },
-          });
-
-          return { cancelled: cancelled.count, installments: amounts.length };
+          return { cancelled, installments };
         });
 
         return { ok: true, ...result };
       } catch (error) {
+        if (error instanceof TRPCError) throw error;
         console.error('Erro ao trocar o plano do aluno:', error);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
@@ -712,67 +660,43 @@ export const studentRouter = createTRPCRouter({
     }),
 
   /**
-   * Cancela a matrícula valendo de hoje. O aluno continua cadastrado, com todo
-   * o histórico: cancelar não é excluir. Fica sem plano em vigor até alguém
-   * matriculá-lo de novo, e é isso que o status "SEM MATRÍCULA" mostra.
-   *
-   * As parcelas ainda por vencer somem junto — cobrar mensalidade de quem não
-   * treina mais seria erro de cobrança. As atrasadas ficam: é aula que já
-   * aconteceu e não foi paga.
+   * Cancela uma matrícula valendo de hoje — só aquela modalidade. O aluno
+   * continua cadastrado, com todo o histórico, e as outras modalidades
+   * seguem: parar o jiu-jitsu não derruba o boxe. Sem nenhuma matrícula
+   * ativa, o status vira "SEM MATRÍCULA".
    */
   cancelEnrollment: staffProcedure
-    .input(z.object({ studentId: z.string() }))
+    .input(z.object({ enrollmentId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const userId = ctx.session.user.id;
       const { tenantId } = ctx;
-      if (!userId) {
-        throw new TRPCError({
-          code: 'UNAUTHORIZED',
-          message: 'Não autorizado',
-        });
-      }
 
-      const student = await ctx.prisma.student.findFirst({
-        where: { id: input.studentId, tenantId },
-        include: { enrollments: { where: { isActive: true } } },
+      const enrollment = await ctx.prisma.enrollment.findFirst({
+        where: { id: input.enrollmentId, student: { tenantId } },
+        select: { id: true, isActive: true },
       });
 
-      if (!student) {
+      if (!enrollment) {
         throw new TRPCError({
           code: 'NOT_FOUND',
-          message: 'Aluno não encontrado',
+          message: 'Matrícula não encontrada',
         });
       }
 
-      if (student.enrollments.length === 0) {
+      if (!enrollment.isActive) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
-          message: 'Este aluno não tem matrícula ativa.',
+          message: 'Esta matrícula já está encerrada.',
         });
       }
 
-      const now = new Date();
-
       try {
-        const cancelled = await ctx.prisma.$transaction(async (tx) => {
-          await tx.enrollment.updateMany({
-            where: { studentId: student.id, isActive: true },
-            data: { isActive: false, endDate: now },
-          });
-
-          const removed = await tx.payment.deleteMany({
-            where: {
-              studentId: student.id,
-              status: PaymentStatus.PENDING,
-              dueDate: { gte: now },
-            },
-          });
-
-          return removed.count;
-        });
+        const cancelled = await ctx.prisma.$transaction((tx) =>
+          encerrarMatricula(tx, enrollment.id, new Date()),
+        );
 
         return { ok: true, cancelled };
       } catch (error) {
+        if (error instanceof TRPCError) throw error;
         console.error('Erro ao cancelar a matrícula:', error);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',

@@ -11,6 +11,7 @@ import {
   Edit2,
   Mail,
   Phone,
+  Plus,
   Repeat,
   UserMinus,
   Wallet,
@@ -34,7 +35,10 @@ import { LoadingContent } from '@/components/LoadingContent';
 import { SheetEditStudent } from '@/components/modals/student/EditStudent/sheetEditStudent.component';
 import { RowActions } from '@/components/dataTable/rowActions.component';
 import { RegisterPaymentDialog } from '@/components/modals/payments/registerPayment/registerPaymentDialog.component';
-import { ChangePlanDialog } from '@/components/modals/students/changePlan/changePlanDialog.component';
+import {
+  ChangePlanDialog,
+  type EnrollmentToChange,
+} from '@/components/modals/students/changePlan/changePlanDialog.component';
 import { CancelEnrollmentDialog } from '@/components/modals/students/cancelEnrollment/cancelEnrollmentDialog.component';
 import { api } from '@/trpc/react';
 import { cn } from '@/lib/utils';
@@ -67,8 +71,16 @@ export default function StudentDetailPage({
 
   const [editOpen, setEditOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
+  /* Os diálogos de matrícula agem sobre uma modalidade: guardam qual. */
   const [changePlanOpen, setChangePlanOpen] = useState(false);
-  const [cancelOpen, setCancelOpen] = useState(false);
+  const [changePlanFor, setChangePlanFor] = useState<EnrollmentToChange | null>(
+    null,
+  );
+  const [cancelFor, setCancelFor] = useState<{
+    id: string;
+    modality: string;
+    plan: string;
+  } | null>(null);
 
   const { data, isLoading, isError, refetch } =
     api.student.getDetailsByID.useQuery({ id });
@@ -91,6 +103,41 @@ export default function StudentDetailPage({
 
   const student = data.data;
   const { totals } = student;
+  const ativas = student.activeEnrollments;
+  const unicaAtiva = ativas.length === 1 ? ativas[0] : undefined;
+
+  const trocarPlano = (enrollment: (typeof ativas)[number]) => {
+    setChangePlanFor({
+      id: enrollment.id,
+      planId: enrollment.planId,
+      planName: enrollment.plan.name,
+      modality: enrollment.modality,
+    });
+    setChangePlanOpen(true);
+  };
+  const matricular = () => {
+    setChangePlanFor(null);
+    setChangePlanOpen(true);
+  };
+  const cancelar = (enrollment: (typeof ativas)[number]) =>
+    setCancelFor({
+      id: enrollment.id,
+      modality: enrollment.modality.name,
+      plan: enrollment.plan.name,
+    });
+  const acoesDaMatricula = (enrollment: (typeof ativas)[number]) => [
+    {
+      label: 'Trocar plano',
+      icon: Repeat,
+      onSelect: () => trocarPlano(enrollment),
+    },
+    {
+      label: 'Cancelar matrícula',
+      icon: UserMinus,
+      destructive: true,
+      onSelect: () => cancelar(enrollment),
+    },
+  ];
   const latestPayments = [...student.payments]
     .sort(
       (a, b) => new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime(),
@@ -105,13 +152,25 @@ export default function StudentDetailPage({
       icon: Edit2,
       onSelect: () => setEditOpen(true),
     },
-    ...(student.activeEnrollment
+    /* Com uma modalidade só, o atalho do topo troca o plano dela; matricular
+       em outra fica aqui. Com várias, cada matrícula tem as suas ações no
+       cartão "Matrículas". */
+    ...(ativas.length > 0
       ? [
           {
-            label: 'Cancelar matrícula',
+            label: 'Matricular em outra modalidade',
+            icon: Plus,
+            onSelect: matricular,
+          },
+        ]
+      : []),
+    ...(unicaAtiva
+      ? [
+          {
+            label: `Cancelar matrícula em ${unicaAtiva.modality.name}`,
             icon: UserMinus,
             destructive: true,
-            onSelect: () => setCancelOpen(true),
+            onSelect: () => cancelar(unicaAtiva),
           },
         ]
       : []),
@@ -177,7 +236,15 @@ export default function StudentDetailPage({
                     >
                       {student.status}
                     </span>
-                    <Badge variant="secondary">{student.planName}</Badge>
+                    {ativas.length === 0 ? (
+                      <Badge variant="secondary">Sem plano</Badge>
+                    ) : (
+                      ativas.map((enrollment) => (
+                        <Badge key={enrollment.id} variant="secondary">
+                          {enrollment.modality.name} · {enrollment.plan.name}
+                        </Badge>
+                      ))
+                    )}
                   </div>
                 </div>
 
@@ -208,10 +275,12 @@ export default function StudentDetailPage({
                 <Button
                   variant="outline"
                   className="w-full sm:w-auto"
-                  onClick={() => setChangePlanOpen(true)}
+                  onClick={() =>
+                    unicaAtiva ? trocarPlano(unicaAtiva) : matricular()
+                  }
                 >
                   <Repeat className="mr-2 h-4 w-4" />
-                  {student.activeEnrollment ? 'Trocar plano' : 'Matricular'}
+                  {unicaAtiva ? 'Trocar plano' : 'Matricular'}
                 </Button>
 
                 <Button
@@ -311,24 +380,52 @@ export default function StudentDetailPage({
             }
           />
           <Field
-            label="Plano atual"
-            value={student.activeEnrollment?.plan?.name ?? 'Sem plano'}
+            label={ativas.length > 1 ? 'Modalidades' : 'Modalidade'}
+            value={
+              ativas.length === 0
+                ? 'Sem matrícula'
+                : ativas.map((e) => e.modality.name).join(', ')
+            }
           />
           <Field
-            label="Início da matrícula"
-            value={formatDate(student.activeEnrollment?.startDate)}
+            label={ativas.length > 1 ? 'Planos atuais' : 'Plano atual'}
+            value={
+              ativas.length === 0
+                ? 'Sem plano'
+                : ativas
+                    .map((e) =>
+                      ativas.length > 1
+                        ? `${e.modality.name}: ${e.plan.name}`
+                        : e.plan.name,
+                    )
+                    .join(', ')
+            }
           />
           <Field
             label="Fim da matrícula"
-            value={formatDate(student.activeEnrollment?.endDate)}
+            value={
+              ativas.length === 0
+                ? '—'
+                : ativas
+                    .map((e) =>
+                      ativas.length > 1
+                        ? `${e.modality.name}: ${formatDate(e.endDate)}`
+                        : formatDate(e.endDate),
+                    )
+                    .join(', ')
+            }
           />
         </CardContent>
       </Card>
 
       {/* Matrículas */}
       <Card className="mb-6">
-        <CardHeader>
+        <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle>Matrículas</CardTitle>
+          <Button variant="outline" size="sm" onClick={matricular}>
+            <Plus className="mr-2 h-4 w-4" />
+            Matricular em modalidade
+          </Button>
         </CardHeader>
         <CardContent className="p-0">
           {student.enrollments.length === 0 ? (
@@ -345,13 +442,24 @@ export default function StudentDetailPage({
                   >
                     <div className="flex items-start justify-between gap-2">
                       <p className="font-medium">
+                        {enrollment.modality.name} ·{' '}
                         {enrollment.plan?.name ?? '—'}
                       </p>
-                      <Badge
-                        variant={enrollment.isActive ? 'success' : 'secondary'}
-                      >
-                        {enrollment.isActive ? 'Ativa' : 'Encerrada'}
-                      </Badge>
+                      <div className="flex items-center gap-1">
+                        <Badge
+                          variant={
+                            enrollment.isActive ? 'success' : 'secondary'
+                          }
+                        >
+                          {enrollment.isActive ? 'Ativa' : 'Encerrada'}
+                        </Badge>
+                        {enrollment.isActive && (
+                          <RowActions
+                            srLabel={`Ações da matrícula em ${enrollment.modality.name}`}
+                            actions={acoesDaMatricula(enrollment)}
+                          />
+                        )}
+                      </div>
                     </div>
 
                     <p className="text-muted-foreground text-sm">
@@ -368,19 +476,24 @@ export default function StudentDetailPage({
               <Table containerClassName="hidden max-h-[22rem] overflow-y-auto md:block">
                 <TableHeader className="bg-card sticky top-0 z-10">
                   <TableRow>
+                    <TableHead>Modalidade</TableHead>
                     <TableHead>Plano</TableHead>
                     <TableHead>Início</TableHead>
                     <TableHead>Fim</TableHead>
                     <TableHead className="text-right">Valor</TableHead>
                     <TableHead>Situação</TableHead>
+                    <TableHead className="w-10">
+                      <span className="sr-only">Ações</span>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {student.enrollments.map((enrollment) => (
                     <TableRow key={enrollment.id}>
                       <TableCell className="font-medium">
-                        {enrollment.plan?.name ?? '—'}
+                        {enrollment.modality.name}
                       </TableCell>
+                      <TableCell>{enrollment.plan?.name ?? '—'}</TableCell>
                       <TableCell className="text-muted-foreground">
                         {formatDate(enrollment.startDate)}
                       </TableCell>
@@ -400,6 +513,14 @@ export default function StudentDetailPage({
                         >
                           {enrollment.isActive ? 'Ativa' : 'Encerrada'}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {enrollment.isActive && (
+                          <RowActions
+                            srLabel={`Ações da matrícula em ${enrollment.modality.name}`}
+                            actions={acoesDaMatricula(enrollment)}
+                          />
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -588,20 +709,24 @@ export default function StudentDetailPage({
         onOpenChange={setPayOpen}
       />
 
-      <CancelEnrollmentDialog
-        studentId={student.id}
-        studentName={student.name}
-        planName={student.planName}
-        open={cancelOpen}
-        onOpenChange={setCancelOpen}
-        onCancelled={refetch}
-      />
+      {cancelFor && (
+        <CancelEnrollmentDialog
+          enrollmentId={cancelFor.id}
+          studentName={student.name}
+          modalityName={cancelFor.modality}
+          planName={cancelFor.plan}
+          otherActive={ativas.length - 1}
+          open
+          onOpenChange={(aberto) => !aberto && setCancelFor(null)}
+          onCancelled={refetch}
+        />
+      )}
 
       <ChangePlanDialog
         studentId={student.id}
         studentName={student.name}
-        currentPlanId={student.activeEnrollment?.planId}
-        currentPlanName={student.planName}
+        enrollment={changePlanFor}
+        enrolledModalityIds={ativas.map((e) => e.modality.id)}
         open={changePlanOpen}
         onOpenChange={setChangePlanOpen}
         onChanged={refetch}

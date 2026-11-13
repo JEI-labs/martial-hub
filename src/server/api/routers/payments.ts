@@ -12,6 +12,11 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { capitalize } from 'lodash';
 
+import {
+  categoriaDeAlunos,
+  enrollmentModalitySelect,
+} from '@/server/enrollments';
+
 export const paymentsRouter = createTRPCRouter({
   getPaymentsByStudent: protectedProcedure
     .input(z.object({ studentId: z.string() }))
@@ -27,6 +32,9 @@ export const paymentsRouter = createTRPCRouter({
           studentId: input.studentId,
           // sem isto qualquer sessão lia as parcelas de qualquer aluno
           student: { tenantId },
+        },
+        include: {
+          enrollment: { select: enrollmentModalitySelect },
         },
       });
 
@@ -78,6 +86,9 @@ export const paymentsRouter = createTRPCRouter({
       const [data, total] = await Promise.all([
         ctx.prisma.payment.findMany({
           where,
+          include: {
+            enrollment: { select: enrollmentModalitySelect },
+          },
           orderBy: { dueDate: 'desc' },
           skip: (input.page - 1) * input.limit,
           take: input.limit,
@@ -100,8 +111,10 @@ export const paymentsRouter = createTRPCRouter({
   updatePayment: staffProcedure
     .input(
       z.object({
-        studentId: z.string(),
-        dueDate: z.string(),
+        /* Pelo id, e não por aluno + vencimento: com uma matrícula por
+           modalidade, duas parcelas do mesmo aluno podem vencer no mesmo
+           dia, e a data sozinha não diz qual foi paga. */
+        paymentId: z.string(),
         /** Promoção aplicada nesta parcela, se houver. */
         promotionId: z.string().uuid().nullable().optional(),
       }),
@@ -114,22 +127,29 @@ export const paymentsRouter = createTRPCRouter({
       }
 
       try {
-        const student = await ctx.prisma.student.findUnique({
-          where: { id: input.studentId },
+        const payment = await ctx.prisma.payment.findFirst({
+          where: {
+            id: input.paymentId,
+            status: PaymentStatus.PENDING,
+            /* Sem isto, qualquer sessão dava baixa em parcela de outra
+               academia. */
+            student: { tenantId },
+          },
           include: {
-            enrollments: {
-              where: { isActive: true },
-              include: { plan: true },
-            },
+            student: { select: { id: true, name: true } },
+            enrollment: { select: { modality: { select: { name: true } } } },
           },
         });
 
-        if (!student || !student.enrollments[0]?.plan) {
+        if (!payment) {
           throw new TRPCError({
             code: 'NOT_FOUND',
-            message: 'Plano do aluno não encontrado',
+            message:
+              'Parcela pendente não encontrada. Ela pode já ter sido paga; recarregue a lista.',
           });
         }
+
+        const { student } = payment;
 
         let promotion = null;
         if (input.promotionId) {
@@ -144,37 +164,7 @@ export const paymentsRouter = createTRPCRouter({
           }
         }
 
-        const category = await ctx.prisma.category.findFirst({
-          where: {
-            tenantId,
-            isFixed: true,
-            name: { equals: 'Alunos', mode: 'insensitive' },
-          },
-        });
-
-        if (!category?.id) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: 'Categoria "Alunos" não encontrada',
-          });
-        }
-
-        const dueDate = new Date(input.dueDate);
-
-        const payment = await ctx.prisma.payment.findFirst({
-          where: {
-            studentId: input.studentId,
-            dueDate,
-            status: PaymentStatus.PENDING,
-          },
-        });
-
-        if (!payment) {
-          throw new TRPCError({
-            code: 'NOT_FOUND',
-            message: 'Nenhuma parcela pendente encontrada para essa data.',
-          });
-        }
+        const category = await categoriaDeAlunos(ctx.prisma, tenantId);
 
         /* O valor é o da parcela, não o preço de hoje do plano: uma
            mensalidade reajustada não pode reescrever o que já estava
@@ -193,11 +183,18 @@ export const paymentsRouter = createTRPCRouter({
         // a receita entra pelo que foi de fato recebido
         const amount = (fullAmount - discount) * 100;
 
-        // Buscar todas as parcelas do aluno e identificar o número da atual
+        /* O número da parcela conta dentro da matrícula dela: a 3ª do boxe
+           não é a 7ª do aluno. Parcela antiga sem matrícula conta entre as
+           do aluno, como antes. */
         const allPayments = await ctx.prisma.payment.findMany({
-          where: { studentId: input.studentId },
+          where: payment.enrollmentId
+            ? { enrollmentId: payment.enrollmentId }
+            : { studentId: student.id },
           orderBy: { dueDate: 'asc' },
+          select: { id: true },
         });
+        const modalidade = payment.enrollment?.modality.name;
+        const em = modalidade ? ` em ${modalidade}` : '';
 
         const parcelNumber =
           allPayments.findIndex((p) => p.id === payment.id) + 1;
@@ -205,24 +202,37 @@ export const paymentsRouter = createTRPCRouter({
           locale: ptBR,
         });
 
-        await ctx.prisma.$transaction([
-          ctx.prisma.payment.update({
-            where: { id: payment.id },
+        await ctx.prisma.$transaction(async (tx) => {
+          /* A baixa só vale se a parcela ainda está pendente: duas telas (ou
+             duas pessoas) dando baixa ao mesmo tempo leram as duas PENDING lá
+             em cima, e sem esta condição as duas lançavam a receita. A
+             segunda espera a primeira no lock da linha, não acha mais nada
+             pendente e desiste antes do lançamento. */
+          const baixa = await tx.payment.updateMany({
+            where: { id: payment.id, status: PaymentStatus.PENDING },
             data: {
               status: PaymentStatus.PAID,
               paymentDate: new Date(),
               discountAmount: discount,
               promotionId: promotion?.id ?? null,
             },
-          }),
-          ctx.prisma.financeEntry.create({
+          });
+
+          if (baixa.count === 0) {
+            throw new TRPCError({
+              code: 'CONFLICT',
+              message: 'Esta parcela acabou de ser paga por outra pessoa.',
+            });
+          }
+
+          await tx.financeEntry.create({
             data: {
               date: new Date(),
               amount,
               paymentMethod: EPaymentMethod.CREDIT_CARD,
               description: promotion
-                ? `Parcela ${parcelNumber} de ${student.name} com vencimento em ${capitalize(monthYear)} (promoção: ${promotion.name}).`
-                : `Parcela ${parcelNumber} de ${student.name} com vencimento em ${capitalize(monthYear)}.`,
+                ? `Parcela ${parcelNumber} de ${student.name}${em} com vencimento em ${capitalize(monthYear)} (promoção: ${promotion.name}).`
+                : `Parcela ${parcelNumber} de ${student.name}${em} com vencimento em ${capitalize(monthYear)}.`,
               type: EFinanceEntryType.STUDENTS,
               status: EFinanceEntryStatus.PAID,
               currency: 'BRL',
@@ -231,11 +241,14 @@ export const paymentsRouter = createTRPCRouter({
               categoryId: category.id,
               studentId: student.id,
             },
-          }),
-        ]);
+          });
+        });
 
         return { ok: true };
       } catch (err) {
+        /* Os erros de negócio (parcela já paga, promoção inativa, categoria
+           faltando) já vêm com a mensagem certa; só o inesperado vira 500. */
+        if (err instanceof TRPCError) throw err;
         console.error(err);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',

@@ -1,7 +1,5 @@
 'use client';
 
-import { useEffect } from 'react';
-import { PLAN_BILLING_LABEL } from '@/common/constants/planBilling';
 import {
   GraduationBadge,
   nomeDaFaixa,
@@ -24,6 +22,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { api } from '@/trpc/react';
 import { SheetCreateStudentProps } from './sheetCreateStudent.types';
+import { EnrollmentsField } from './enrollmentsField.component';
 import {
   createStudentSchema,
   defaultCreateStudentValues,
@@ -66,15 +65,20 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
     mode: 'onChange',
   });
 
-  /* Os planos chegam depois do primeiro render, e o formulário volta ao
-     estado limpo a cada abertura — daí depender das duas coisas. Só preenche
-     se ninguém escolheu nada ainda, para não trocar o plano debaixo de quem
-     já clicou. */
-  useEffect(() => {
-    if (isOpen && defaultPlanId && !form.getValues('planId')) {
-      form.setValue('planId', defaultPlanId, { shouldValidate: true });
-    }
-  }, [isOpen, defaultPlanId, form]);
+  /* As modalidades ativas, na ordem da academia: cada uma pode virar uma
+     matrícula, tenha faixa ou não (boxe também se matricula). */
+  const modalidadesApi = api.modalities.list.useQuery(undefined, {
+    staleTime: 60_000,
+  });
+  const modalidadesAtivas = (modalidadesApi.data ?? [])
+    .filter((m) => m.isActive)
+    .map(({ id, name }) => ({ id, name }));
+  const enrollmentsError =
+    form.formState.errors.enrollments?.message ??
+    form.formState.errors.enrollments?.root?.message ??
+    (Array.isArray(form.formState.errors.enrollments)
+      ? form.formState.errors.enrollments.find(Boolean)?.planId?.message
+      : undefined);
 
   const onSubmit = async (data: IStudentCreateTypes) => {
     try {
@@ -204,29 +208,20 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
             Matrícula
           </h3>
 
-          <FormSelectComponent
+          <EnrollmentsField
             control={form.control}
-            name="planId"
-            label="Plano"
-            tooltip="Define o valor e a duração da matrícula, e gera as parcelas do aluno."
-            placeholder="Selecione o plano"
-            options={
-              plansData?.data.map((plan) => ({
-                value: plan.id,
-                // preço e duração no rótulo para dar contexto na hora
-                // de escolher; precisa ser string (o Radix usa
-                // textValue para busca por digitação)
-                textValue: `${plan.name} · ${Number(plan.price).toLocaleString(
-                  'pt-BR',
-                  {
-                    style: 'currency',
-                    currency: 'BRL',
-                  },
-                )} · ${plan.duration} ${plan.duration === 1 ? 'mês' : 'meses'} · ${
-                  PLAN_BILLING_LABEL[plan.billing]
-                }`,
-              })) ?? []
-            }
+            setValue={form.setValue}
+            modalidades={modalidadesAtivas}
+            carregando={modalidadesApi.isLoading}
+            erro={modalidadesApi.isError && !modalidadesApi.data}
+            tentarDeNovo={() => void modalidadesApi.refetch()}
+            planos={(plansData?.data ?? []).map((plan) => ({
+              ...plan,
+              price: Number(plan.price),
+            }))}
+            defaultPlanId={defaultPlanId}
+            open={isOpen}
+            error={enrollmentsError}
           />
 
           {opcoesDeGraduacao.length > 0 && (
