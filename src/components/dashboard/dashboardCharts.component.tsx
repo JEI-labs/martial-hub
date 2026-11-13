@@ -23,6 +23,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { grauDaFaixa } from '@/common/constants/graduations';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
   ChartContainer,
@@ -32,9 +33,7 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from '@/components/ui/chart';
-import { GRADUATIONS } from '@/common/constants/graduations';
 import type { RouterOutputs } from '@/trpc/react';
-import type { EGraduation } from '@prisma/client';
 
 type Overview = RouterOutputs['dashboard']['getOverview'];
 type Series = Overview['series'];
@@ -599,16 +598,36 @@ export function GraduationChart({
     students: { label: 'Alunos', color: 'hsl(var(--chart-3))' },
   } satisfies ChartConfig;
 
+  /* Com mais de uma modalidade, "4º" sozinho é ambíguo: o eixo ganha a sigla
+     dela (MT 4º, JJ Azul) e o tooltip, o nome inteiro. O grau só existe no
+     Muay Thai; nas outras, o eixo mostra o nome da faixa. */
+  const variasModalidades =
+    new Set(byGraduation.map((item) => item.modality).filter(Boolean)).size > 1;
+  const sigla = (nome: string) =>
+    nome
+      .split(/[\s-]+/)
+      .map((parte) => parte.charAt(0))
+      .join('')
+      .toUpperCase()
+      .slice(0, 3);
+
   const data = byGraduation.map((item) => {
-    const isNone = item.graduation === 'SEM_GRADUACAO';
-    const info = isNone ? null : GRADUATIONS[item.graduation as EGraduation];
+    const isNone = item.name === null;
+    const grau = grauDaFaixa(item, item.modalitySlug);
+    const curto = grau ? grau.replace(' grau', '') : (item.name ?? '');
 
     return {
       ...item,
-      key: String(item.graduation),
-      label: isNone ? 'Sem graduação' : `${info?.degree}º`,
-      full: isNone ? 'Sem graduação' : (info?.label ?? ''),
-      colors: info?.colors ?? [],
+      label: isNone
+        ? 'Sem graduação'
+        : variasModalidades && item.modality
+          ? `${sigla(item.modality)} ${curto}`
+          : curto,
+      full: isNone
+        ? 'Sem graduação'
+        : [variasModalidades ? item.modality : null, grau, item.name]
+            .filter(Boolean)
+            .join(' · '),
     };
   });
 
@@ -619,7 +638,7 @@ export function GraduationChart({
   return (
     <ChartCard
       title="Alunos por graduação"
-      description="Cada barra usa as cores da fita do grau"
+      description="Cada barra usa as cores da faixa"
     >
       {data.length === 0 ? (
         <NoData text="Nenhum aluno cadastrado." />

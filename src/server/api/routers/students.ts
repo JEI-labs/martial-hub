@@ -17,13 +17,17 @@ import { del } from '@vercel/blob';
 import {
   EFinanceEntryStatus,
   EFinanceEntryType,
-  EGraduation,
   EPaymentMethod,
   EPlanBilling,
   PaymentStatus,
   Prisma,
 } from '@prisma/client';
 import { getAllStudentInputSchema } from '@/server/validations/pagination';
+import {
+  conferirGraduacao,
+  graduationSelect,
+  traduzirFaixaSumida,
+} from '@/server/graduations';
 import { deriveStudentStatus } from '@/server/utils/studentStatus';
 import { installmentCount, splitIntoInstallments } from '@/utils/planUtils';
 import { format } from 'date-fns';
@@ -58,6 +62,8 @@ export const studentRouter = createTRPCRouter({
         });
       }
 
+      await conferirGraduacao(ctx.prisma, tenantId, input.graduationId);
+
       // 2) Carrega o plano
       const plan = await ctx.prisma.plan.findUnique({
         where: { id: input.planId },
@@ -78,7 +84,7 @@ export const studentRouter = createTRPCRouter({
               name: input.name,
               phone: input.phone,
               birthDate: birthDateFormatted,
-              graduation: input.graduation ?? null,
+              graduationId: input.graduationId ?? null,
               avatar: input.avatarUrl,
               userId,
               tenantId,
@@ -163,9 +169,10 @@ export const studentRouter = createTRPCRouter({
         });
 
         return { ok: true, data: createdStudent };
-      } catch (error) {
-        console.error(error);
+      } catch (err) {
+        const error = traduzirFaixaSumida(err);
         if (error instanceof TRPCError) throw error;
+        console.error(error);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Não foi possível cadastrar aluno',
@@ -246,16 +253,43 @@ export const studentRouter = createTRPCRouter({
         });
       }
 
-      const updated = await ctx.prisma.student.update({
+      const atual = await ctx.prisma.student.findFirst({
         where: { id: input.id, tenantId },
-        data: {
-          name: input.name,
-          email: input.email,
-          phone: input.phone,
-          birthDate: birthDateFormatted,
-          graduation: input.graduation ?? null,
-        },
+        select: { graduationId: true },
       });
+
+      if (!atual) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Aluno não encontrado.',
+        });
+      }
+
+      await conferirGraduacao(
+        ctx.prisma,
+        tenantId,
+        input.graduationId,
+        atual.graduationId,
+      );
+
+      const updated = await ctx.prisma.student
+        .update({
+          where: { id: input.id, tenantId },
+          data: {
+            name: input.name,
+            email: input.email,
+            phone: input.phone,
+            birthDate: birthDateFormatted,
+            /* Só quando veio: o formulário de edição não manda a graduação, e
+               gravar nulo nesse caso apagava a faixa de quem era editado. */
+            ...(input.graduationId !== undefined
+              ? { graduationId: input.graduationId }
+              : {}),
+          },
+        })
+        .catch((err: unknown) => {
+          throw traduzirFaixaSumida(err);
+        });
 
       return {
         message: 'Aluno atualizado com sucesso',
@@ -268,7 +302,7 @@ export const studentRouter = createTRPCRouter({
     .input(
       z.object({
         id: z.string(),
-        graduation: z.nativeEnum(EGraduation).nullable(),
+        graduationId: z.string().uuid().nullable(),
       }),
     )
     .mutation(async ({ input, ctx }) => {
@@ -282,12 +316,28 @@ export const studentRouter = createTRPCRouter({
         });
       }
 
-      // updateMany para o filtro por userId entrar no WHERE: um update
-      // simples por id deixaria alterar aluno de outro usuário
-      const result = await ctx.prisma.student.updateMany({
+      const atual = await ctx.prisma.student.findFirst({
         where: { id: input.id, tenantId },
-        data: { graduation: input.graduation },
+        select: { graduationId: true },
       });
+
+      await conferirGraduacao(
+        ctx.prisma,
+        tenantId,
+        input.graduationId,
+        atual?.graduationId,
+      );
+
+      // updateMany para o filtro por tenant entrar no WHERE: um update
+      // simples por id deixaria alterar aluno de outra academia
+      const result = await ctx.prisma.student
+        .updateMany({
+          where: { id: input.id, tenantId },
+          data: { graduationId: input.graduationId },
+        })
+        .catch((err: unknown) => {
+          throw traduzirFaixaSumida(err);
+        });
 
       if (result.count === 0) {
         throw new TRPCError({
@@ -348,6 +398,7 @@ export const studentRouter = createTRPCRouter({
                 where: { isActive: true },
                 include: { plan: true },
               },
+              graduation: { select: graduationSelect },
             },
           }),
           // precisa dos mesmos filtros do findMany: contando só por tenantId,
@@ -435,6 +486,7 @@ export const studentRouter = createTRPCRouter({
             include: { category: true },
             orderBy: { date: 'desc' },
           },
+          graduation: { select: graduationSelect },
         },
       });
 

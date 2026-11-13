@@ -16,6 +16,7 @@ import { securityRouter } from './routers/security';
 import { agendaRouter } from './routers/agenda';
 import { lessonTypesRouter } from './routers/lessonTypes';
 import { modalitiesRouter } from './routers/modalities';
+import { graduationsRouter } from './routers/graduations';
 
 /**
  * This is the primary router for your server.
@@ -40,6 +41,7 @@ export const appRouter = createTRPCRouter({
   agenda: agendaRouter,
   lessonTypes: lessonTypesRouter,
   modalities: modalitiesRouter,
+  graduations: graduationsRouter,
 });
 
 // export type definition of API

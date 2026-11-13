@@ -7,6 +7,7 @@ import {
 } from '@prisma/client';
 import { hash } from 'argon2';
 
+import { graduacoesDoCatalogo } from '../src/common/constants/graduations';
 import { slugify } from '../src/common/utils/string';
 
 const prisma = new PrismaClient({
@@ -78,7 +79,7 @@ async function main() {
 
   // 5. A modalidade da academia de exemplo — é uma academia de Muay Thai.
   const MODALIDADE = 'Muay Thai';
-  await prisma.modality.upsert({
+  const modalidade = await prisma.modality.upsert({
     where: {
       tenantId_slug: { tenantId: tenant.id, slug: slugify(MODALIDADE) },
     },
@@ -89,6 +90,21 @@ async function main() {
       tenantId: tenant.id,
     },
   });
+
+  // 6. As faixas dela, do catálogo — só se ainda não tiver nenhuma, para
+  // rodar o seed de novo não duplicar.
+  const faixas = await prisma.graduation.count({
+    where: { modalityId: modalidade.id },
+  });
+
+  if (faixas === 0) {
+    await prisma.graduation.createMany({
+      data: graduacoesDoCatalogo(modalidade.slug).map((faixa) => ({
+        ...faixa,
+        modalityId: modalidade.id,
+      })),
+    });
+  }
 }
 
 main()

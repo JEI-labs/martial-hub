@@ -1,12 +1,16 @@
 'use client';
 
 import { useEffect } from 'react';
-import { GRADUATION_LIST } from '@/common/constants/graduations';
 import { PLAN_BILLING_LABEL } from '@/common/constants/planBilling';
-import { GraduationBadge } from '@/components/graduationBadge/graduationBadge.component';
+import {
+  GraduationBadge,
+  nomeDaFaixa,
+} from '@/components/graduationBadge/graduationBadge.component';
+import { useFaixasDisponiveis } from '@/components/graduationBadge/useFaixasDisponiveis';
 import { FormModal } from '@/components/formModal/formModal.component';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import { TRPCClientError } from '@trpc/client';
 import { useForm, useWatch } from 'react-hook-form';
 import { Form } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
@@ -40,6 +44,17 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
   const plansApi = api.plans.getAll.useQuery({ page: 1, limit: 100 });
   const { data: plansData } = plansApi;
   const defaultPlanId = plansData?.data.find((plan) => plan.isDefault)?.id;
+
+  /* As faixas das modalidades ativas que têm faixa. Boxe e afins não entram,
+     e academia sem nenhuma não mostra o campo. */
+  const { modalidades: comFaixas, variasModalidades } = useFaixasDisponiveis();
+  const opcoesDeGraduacao = comFaixas.flatMap((modalidade) =>
+    modalidade.graduations.map((faixa) => ({
+      value: faixa.id,
+      textValue: nomeDaFaixa(faixa, { comModalidade: variasModalidades }),
+      icon: <GraduationBadge graduation={faixa} showLabel={false} />,
+    })),
+  );
 
   const createUser = api.student.create.useMutation();
   const updateUser = api.student.updateAvatar.useMutation();
@@ -92,9 +107,15 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
         variant: 'default',
       });
     } catch (error) {
+      /* A mensagem do servidor diz o que houve ("Email já cadastrado",
+         "Graduação não encontrada nesta academia"); o genérico fica para o
+         erro que não tem uma. */
       toast({
         title: 'Erro',
-        description: 'Não foi possível criar o aluno.',
+        description:
+          error instanceof TRPCClientError && error.message
+            ? error.message
+            : 'Não foi possível criar o aluno.',
         variant: 'destructive',
       });
       console.error(error);
@@ -208,22 +229,18 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
             }
           />
 
-          <FormSelectComponent
-            control={form.control}
-            name="graduation"
-            label="Graduação"
-            tooltip="Kruang-Prajied do aluno. Pode ficar em branco até a primeira graduação."
-            placeholder="Sem graduação"
-            /* aluno novo entra sem graduação, e dá para voltar a esse estado */
-            hasEmptyOption
-            options={GRADUATION_LIST.map((item) => ({
-              value: item.value,
-              textValue: `${item.degree}º grau · ${item.label}`,
-              icon: (
-                <GraduationBadge graduation={item.value} showLabel={false} />
-              ),
-            }))}
-          />
+          {opcoesDeGraduacao.length > 0 && (
+            <FormSelectComponent
+              control={form.control}
+              name="graduationId"
+              label="Graduação"
+              tooltip="Faixa atual do aluno. Pode ficar em branco até a primeira graduação."
+              placeholder="Sem graduação"
+              /* aluno novo entra sem graduação, e dá para voltar a esse estado */
+              hasEmptyOption
+              options={opcoesDeGraduacao}
+            />
+          )}
         </section>
       </FormModal>
     </Form>

@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
+import { graduacoesDoCatalogo } from '@/common/constants/graduations';
 import { slugify } from '@/common/utils/string';
 import {
   createTRPCRouter,
@@ -69,6 +70,12 @@ export const modalitiesRouter = createTRPCRouter({
             slug,
             position: (ultima._max.position ?? -1) + 1,
             tenantId,
+            /* Nasce com as faixas do catálogo, quando ele conhece a
+               modalidade; boxe e nomes livres nascem sem. Um INSERT só para
+               todas, em vez de um por faixa. */
+            graduations: {
+              createMany: { data: graduacoesDoCatalogo(slug) },
+            },
           },
         });
       } catch (err) {
@@ -113,9 +120,29 @@ export const modalitiesRouter = createTRPCRouter({
         await garantirOutraAtiva(ctx.prisma, tenantId, atual.id);
       }
 
+      /* Renomear para um nome do catálogo ("Jiu Jitsu Kids" → "Jiu-Jitsu",
+         "Karate do" → "Karatê") dá a ela as faixas que teria se tivesse
+         nascido com esse nome. Só a quem não tem nenhuma: as faixas que ela
+         já tem podem estar em uso, e trocar uma lista pela outra tiraria a
+         graduação dos alunos. */
+      const faixasDoNomeNovo =
+        slug !== atual.slug &&
+        (await ctx.prisma.graduation.count({
+          where: { modalityId: atual.id },
+        })) === 0
+          ? graduacoesDoCatalogo(slug)
+          : [];
+
       return ctx.prisma.modality.update({
         where: { id: atual.id, tenantId },
-        data: { name: input.name, slug, isActive: input.isActive },
+        data: {
+          name: input.name,
+          slug,
+          isActive: input.isActive,
+          ...(faixasDoNomeNovo.length > 0
+            ? { graduations: { createMany: { data: faixasDoNomeNovo } } }
+            : {}),
+        },
       });
     }),
 
@@ -176,17 +203,46 @@ export const modalitiesRouter = createTRPCRouter({
         });
       }
 
-      /* Por enquanto nada aponta para modalidade. Quando matrícula (#35) e
-         graduação (#34) apontarem, a que estiver em uso só pode ser
-         desativada — a trava entra aqui, com elas. */
+      /* Modalidade em uso só pode ser desativada: apagar levaria junto as
+         faixas, e com elas a graduação dos alunos. A matrícula (#35) entra
+         nesta mesma trava quando apontar para modalidade. */
+      const alunosComFaixa = await ctx.prisma.student.count({
+        where: { tenantId, graduation: { modalityId: alvo.id } },
+      });
+
+      if (alunosComFaixa > 0) throw emUso(alvo.name, alunosComFaixa);
+
       if (alvo.isActive) {
         await garantirOutraAtiva(ctx.prisma, tenantId, alvo.id);
       }
 
-      await ctx.prisma.modality.delete({ where: { id: alvo.id, tenantId } });
+      try {
+        await ctx.prisma.modality.delete({ where: { id: alvo.id, tenantId } });
+      } catch (err) {
+        /* Alguém deu uma faixa dela entre a contagem acima e o delete: o FK
+           do aluno barra a cascata. É a mesma recusa, só que pelo banco. */
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2003'
+        ) {
+          throw emUso(alvo.name);
+        }
+        throw err;
+      }
+
       return { ok: true };
     }),
 });
+
+const emUso = (nome: string, alunos?: number) =>
+  new TRPCError({
+    code: 'BAD_REQUEST',
+    message: `${
+      alunos === undefined
+        ? 'Há alunos com'
+        : `${alunos} ${alunos === 1 ? 'aluno tem' : 'alunos têm'}`
+    } faixa de ${nome}. Desative a modalidade em vez de apagar.`,
+  });
 
 /**
  * Academia sem modalidade ativa não tem o que matricular — a mesma ideia de

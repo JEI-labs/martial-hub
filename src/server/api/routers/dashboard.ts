@@ -1,5 +1,6 @@
 // server/api/routers/painel.ts
 import { createTRPCRouter, protectedProcedure } from '@/server/api/trpc';
+import { graduationSelect } from '@/server/graduations';
 import { deriveStudentStatus } from '@/server/utils/studentStatus';
 import { monthlyValue } from '@/utils/planUtils';
 import type { StudentStatus } from '@/server/utils/studentStatus';
@@ -11,7 +12,7 @@ import {
   EMessageStatus,
   PaymentStatus,
 } from '@prisma/client';
-import type { EGraduation, EPaymentMethod } from '@prisma/client';
+import type { EPaymentMethod } from '@prisma/client';
 import {
   addDays,
   differenceInCalendarDays,
@@ -136,6 +137,18 @@ export const dashboardRouter = createTRPCRouter({
                   orderBy: { startDate: 'desc' },
                 },
                 payments: { orderBy: { dueDate: 'asc' } },
+                graduation: {
+                  select: {
+                    ...graduationSelect,
+                    /* A posição da modalidade ordena as barras. */
+                    modality: {
+                      select: {
+                        ...graduationSelect.modality.select,
+                        position: true,
+                      },
+                    },
+                  },
+                },
               },
             }),
             ctx.prisma.financeEntry.findMany({
@@ -184,7 +197,21 @@ export const dashboardRouter = createTRPCRouter({
           'ATRASADO': 0,
           'SEM MATRÍCULA': 0,
         };
-        const byGraduation = new Map<EGraduation | 'SEM_GRADUACAO', number>();
+        /* Por faixa, e não por nome: "Branca" do jiu-jitsu e do karatê são
+           faixas diferentes. Quem não tem faixa cai numa barra à parte. */
+        type GraduationBar = {
+          key: string;
+          name: string | null;
+          level: string | null;
+          colors: Array<string>;
+          position: number;
+          modality: string | null;
+          /** Decide se o eixo mostra o grau ("4º") ou o nome da faixa. */
+          modalitySlug: string | null;
+          modalityPosition: number;
+          students: number;
+        };
+        const byGraduation = new Map<string, GraduationBar>();
         const byPlan = new Map<string, { students: number; mrr: number }>();
 
         let mrr = 0;
@@ -193,11 +220,21 @@ export const dashboardRouter = createTRPCRouter({
         for (const student of students) {
           const enrollment = currentEnrollment(student);
 
-          const graduationKey = student.graduation ?? 'SEM_GRADUACAO';
-          byGraduation.set(
-            graduationKey,
-            (byGraduation.get(graduationKey) ?? 0) + 1,
-          );
+          const faixa = student.graduation;
+          const graduationKey = faixa?.id ?? 'SEM_GRADUACAO';
+          const bar = byGraduation.get(graduationKey) ?? {
+            key: graduationKey,
+            name: faixa?.name ?? null,
+            level: faixa?.level ?? null,
+            colors: faixa?.colors ?? [],
+            position: faixa?.position ?? 0,
+            modality: faixa?.modality.name ?? null,
+            modalitySlug: faixa?.modality.slug ?? null,
+            modalityPosition: faixa?.modality.position ?? 0,
+            students: 0,
+          };
+          bar.students += 1;
+          byGraduation.set(graduationKey, bar);
 
           if (!enrollment?.plan) continue;
 
@@ -537,11 +574,19 @@ export const dashboardRouter = createTRPCRouter({
             byPlan: Array.from(byPlan.entries())
               .map(([name, value]) => ({ name, ...value }))
               .sort((a, b) => b.mrr - a.mrr),
-            byGraduation: Array.from(byGraduation.entries())
-              .map(([graduation, students]) => ({ graduation, students }))
-              .sort((a, b) =>
-                String(a.graduation).localeCompare(String(b.graduation)),
-              ),
+            /* Na ordem das modalidades e, dentro de cada uma, na ordem das
+               faixas; sem graduação fica por último. O nome da modalidade
+               desempata como em `modalities.list`: duas na mesma posição
+               intercalariam as barras ("MT 1º, JJ Branca, MT 2º…"). */
+            byGraduation: Array.from(byGraduation.values()).sort((a, b) => {
+              if (a.name === null) return 1;
+              if (b.name === null) return -1;
+              return (
+                a.modalityPosition - b.modalityPosition ||
+                (a.modality ?? '').localeCompare(b.modality ?? '') ||
+                a.position - b.position
+              );
+            }),
             expensesByCategory,
             incomeByMethod,
             aging: agingBuckets.map(({ label, amount, count }) => ({

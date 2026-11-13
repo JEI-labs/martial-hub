@@ -1,4 +1,4 @@
-import type { EGraduation } from '@prisma/client';
+import type { GraduationView } from '@/components/graduationBadge/graduationBadge.component';
 
 export interface StudentRow {
   id: string;
@@ -8,7 +8,7 @@ export interface StudentRow {
   status: string;
   planName: string;
   planId?: string | null;
-  graduation?: EGraduation | null;
+  graduation?: GraduationView | null;
   createdAt: Date;
 }
 
