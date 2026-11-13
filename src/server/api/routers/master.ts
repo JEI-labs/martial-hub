@@ -62,8 +62,9 @@ function modalidadesIniciais(nomes: Array<string>) {
       name,
       slug,
       position,
-      /* Com as faixas do catálogo, quando ele conhece a modalidade. */
-      graduations: { create: graduacoesDoCatalogo(slug) },
+      /* Com as faixas do catálogo, quando ele conhece a modalidade. Um
+         INSERT por modalidade, e não um por faixa. */
+      graduations: { createMany: { data: graduacoesDoCatalogo(slug) } },
     };
   });
 }

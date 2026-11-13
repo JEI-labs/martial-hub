@@ -1,5 +1,6 @@
 // server/api/routers/painel.ts
 import { createTRPCRouter, protectedProcedure } from '@/server/api/trpc';
+import { graduationSelect } from '@/server/graduations';
 import { deriveStudentStatus } from '@/server/utils/studentStatus';
 import { monthlyValue } from '@/utils/planUtils';
 import type { StudentStatus } from '@/server/utils/studentStatus';
@@ -141,12 +142,14 @@ export const dashboardRouter = createTRPCRouter({
                 payments: { orderBy: { dueDate: 'asc' } },
                 graduation: {
                   select: {
-                    id: true,
-                    name: true,
-                    level: true,
-                    colors: true,
-                    position: true,
-                    modality: { select: { name: true, position: true } },
+                    ...graduationSelect,
+                    /* A posição da modalidade ordena as barras. */
+                    modality: {
+                      select: {
+                        ...graduationSelect.modality.select,
+                        position: true,
+                      },
+                    },
                   },
                 },
               },
@@ -206,6 +209,8 @@ export const dashboardRouter = createTRPCRouter({
           colors: Array<string>;
           position: number;
           modality: string | null;
+          /** Decide se o eixo mostra o grau ("4º") ou o nome da faixa. */
+          modalitySlug: string | null;
           modalityPosition: number;
           students: number;
         };
@@ -227,6 +232,7 @@ export const dashboardRouter = createTRPCRouter({
             colors: faixa?.colors ?? [],
             position: faixa?.position ?? 0,
             modality: faixa?.modality.name ?? null,
+            modalitySlug: faixa?.modality.slug ?? null,
             modalityPosition: faixa?.modality.position ?? 0,
             students: 0,
           };
@@ -590,12 +596,15 @@ export const dashboardRouter = createTRPCRouter({
               .map(([name, value]) => ({ name, ...value }))
               .sort((a, b) => b.mrr - a.mrr),
             /* Na ordem das modalidades e, dentro de cada uma, na ordem das
-               faixas; sem graduação fica por último. */
+               faixas; sem graduação fica por último. O nome da modalidade
+               desempata como em `modalities.list`: duas na mesma posição
+               intercalariam as barras ("MT 1º, JJ Branca, MT 2º…"). */
             byGraduation: Array.from(byGraduation.values()).sort((a, b) => {
               if (a.name === null) return 1;
               if (b.name === null) return -1;
               return (
                 a.modalityPosition - b.modalityPosition ||
+                (a.modality ?? '').localeCompare(b.modality ?? '') ||
                 a.position - b.position
               );
             }),

@@ -13,6 +13,8 @@ const { createCallerFactory, createTRPCRouter } =
 const { modalitiesRouter } = await import('./modalities');
 const { graduationsRouter } = await import('./graduations');
 const { studentRouter } = await import('./students');
+const { traduzirFaixaSumida } = await import('@/server/graduations');
+const { TRPCError } = await import('@trpc/server');
 
 const createCaller = createCallerFactory(
   createTRPCRouter({
@@ -162,12 +164,12 @@ describe('graduations.list', () => {
 
     const lista = await como(a, EUserRole.TEACHER).graduations.list();
 
-    expect(lista.map((m) => [m.name, m.graduations.length])).toEqual([
-      ['Boxe', 0],
-      ['Judô', 9],
+    /* Boxe não tem faixa: nem vem, para a tela não ter de filtrar. */
+    expect(lista.map((m) => [m.name, m.slug, m.graduations.length])).toEqual([
+      ['Judô', 'judo', 9],
     ]);
-    expect(lista[1]?.id).toBe(judo.id);
-    expect(lista[1]?.graduations[0]?.name).toBe('Branca');
+    expect(lista[0]?.id).toBe(judo.id);
+    expect(lista[0]?.graduations[0]?.name).toBe('Branca');
   });
 
   it('não mostra a modalidade de outra academia', async () => {
@@ -274,5 +276,114 @@ describe('apagar modalidade com faixa em uso', () => {
     await expect(
       prisma.graduation.delete({ where: { id: faixa!.id } }),
     ).rejects.toThrow();
+  });
+});
+
+describe('modalidade e catálogo', () => {
+  it('renomear para um nome do catálogo dá as faixas dele', async () => {
+    const kids = await como(a).modalities.create({ name: 'Jiu Jitsu Kids' });
+    expect(await faixasDe(kids.id)).toHaveLength(0);
+
+    await como(a).modalities.update({
+      id: kids.id,
+      name: 'Jiu-Jitsu',
+      isActive: true,
+    });
+
+    const faixas = await faixasDe(kids.id);
+    expect(faixas).toHaveLength(20);
+    expect(faixas[0]?.name).toBe('Branca');
+  });
+
+  it('renomear quem já tem faixa não troca nem duplica a lista', async () => {
+    const mt = await como(a).modalities.create({ name: 'Muay Thai' });
+
+    await como(a).modalities.update({
+      id: mt.id,
+      name: 'Karatê',
+      isActive: true,
+    });
+
+    const faixas = await faixasDe(mt.id);
+    expect(faixas).toHaveLength(11);
+    expect(faixas[0]?.name).toBe('Branco');
+  });
+
+  it('nome que coincide com algo de Object.prototype não derruba', async () => {
+    const constructor = await como(a).modalities.create({
+      name: 'Constructor',
+    });
+    expect(await faixasDe(constructor.id)).toHaveLength(0);
+  });
+});
+
+describe('faixa de modalidade desativada', () => {
+  const montar = async () => {
+    const mt = await como(a).modalities.create({ name: 'Muay Thai' });
+    await como(a).modalities.create({ name: 'Judô' });
+    const faixas = await prisma.graduation.findMany({
+      where: { modalityId: mt.id },
+      orderBy: { position: 'asc' },
+    });
+    return { mt, faixas };
+  };
+
+  it('não pode ser dada a ninguém', async () => {
+    const { mt, faixas } = await montar();
+    await como(a).modalities.update({
+      id: mt.id,
+      name: 'Muay Thai',
+      isActive: false,
+    });
+    const aluno = await novoAluno(a);
+
+    await expect(
+      como(a).student.updateGraduation({
+        id: aluno.id,
+        graduationId: faixas[2]!.id,
+      }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: expect.stringContaining('desativada'),
+    });
+  });
+
+  it('quem já tem continua podendo regravar a sua, e removê-la', async () => {
+    const { mt, faixas } = await montar();
+    const aluno = await novoAluno(a, faixas[2]!.id);
+    await como(a).modalities.update({
+      id: mt.id,
+      name: 'Muay Thai',
+      isActive: false,
+    });
+
+    await como(a).student.updateGraduation({
+      id: aluno.id,
+      graduationId: faixas[2]!.id,
+    });
+    await como(a).student.updateGraduation({
+      id: aluno.id,
+      graduationId: null,
+    });
+
+    const depois = await prisma.student.findUnique({ where: { id: aluno.id } });
+    expect(depois?.graduationId).toBeNull();
+  });
+});
+
+describe('faixa que some entre a conferência e a gravação', () => {
+  it('vira a mensagem de faixa não encontrada, e não um 500', async () => {
+    /* O que o banco devolve quando o aluno aponta para faixa que não existe
+       mais: o mesmo erro da corrida com o `modalities.remove`. */
+    const erro = await novoAluno(a, randomUUID()).catch((err: unknown) => err);
+
+    const traduzido = traduzirFaixaSumida(erro);
+    expect(traduzido).toBeInstanceOf(TRPCError);
+    expect(traduzido).toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('outros erros passam como vieram', () => {
+    const outro = new Error('qualquer');
+    expect(traduzirFaixaSumida(outro)).toBe(outro);
   });
 });
