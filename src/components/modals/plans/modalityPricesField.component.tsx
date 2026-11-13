@@ -1,74 +1,76 @@
 'use client';
 
-import { useState } from 'react';
-import type {
-  FieldValues,
-  Path,
-  PathValue,
-  UseFormSetValue,
+import {
+  useWatch,
+  type Control,
+  type FieldValues,
+  type Path,
+  type PathValue,
+  type UseFormSetValue,
 } from 'react-hook-form';
 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useResetOnChange } from '@/hooks/useResetOnChange/useResetOnChange.hook';
 import type { IModalityPriceInput } from '@/server/validations/plans';
 import { api } from '@/trpc/react';
 import { maskDecimalWithAcronym, unmaskDecimal } from '@/utils/masksUtils';
 
 interface ModalityPricesFieldProps<T extends FieldValues> {
+  control: Control<T>;
   setValue: UseFormSetValue<T>;
   open: boolean;
-  /** Os valores que o plano já tem, em reais. Vazio para plano novo. */
-  existentes?: Array<{ modalityId: string; price: number }>;
 }
-
-const emCentavos = (reais: number) => String(Math.round(reais * 100));
 
 /**
  * O valor do plano em cada modalidade. Em branco, a modalidade usa o preço
- * padrão do plano — o campo de cima. Só aparece com duas modalidades ou
- * mais: com uma, o preço padrão já é o dela.
+ * padrão do plano — o campo de cima.
  *
- * Guarda o que está na tela por conta própria e só escreve no formulário
- * quando alguém muda um valor. Assim, salvar sem mexer aqui não reescreve os
- * valores do plano, e o reset que o formulário de edição faz ao carregar não
- * apaga o que este campo mostra.
+ * O que aparece na tela é o `modalityPrices` do formulário, e só ele: não há
+ * cópia à parte que possa mostrar um valor que não vai ser enviado. Na
+ * edição, o formulário já chega com os valores do plano (o reset do sheet os
+ * inclui), e o servidor só mexe nas modalidades que vierem na lista.
+ *
+ * Aparece com duas modalidades ativas ou mais — com uma, o preço padrão já é
+ * o dela — e também sempre que o plano tiver algum valor por modalidade, para
+ * que ele possa ser visto e limpo. Modalidade desativada com valor aparece
+ * marcada: o valor dela continua valendo na troca de plano de quem já a faz.
  */
 export function ModalityPricesField<T extends FieldValues>({
+  control,
   setValue,
   open,
-  existentes,
 }: ModalityPricesFieldProps<T>) {
   const { data: modalidades } = api.modalities.list.useQuery(undefined, {
     enabled: open,
   });
-  const ativas = (modalidades ?? []).filter((m) => m.isActive);
 
-  /* Centavos em texto, como o preço padrão do formulário; vazio é "usa o
-     padrão". */
-  const inicial = () =>
-    Object.fromEntries(
-      (existentes ?? []).map((e) => [e.modalityId, emCentavos(e.price)]),
-    );
-  const [valores, setValores] = useState<Record<string, string>>(inicial);
-  useResetOnChange([open, JSON.stringify(existentes ?? [])], () =>
-    setValores(inicial()),
+  const lista: Array<IModalityPriceInput> =
+    (useWatch({ control, name: 'modalityPrices' as Path<T> }) as
+      Array<IModalityPriceInput> | undefined) ?? [];
+  const valorDe = (modalityId: string) =>
+    lista.find((item) => item.modalityId === modalityId)?.price ?? '';
+
+  const comValor = (id: string) => {
+    const valor = valorDe(id);
+    return valor !== '' && valor !== '0';
+  };
+  const visiveis = (modalidades ?? []).filter(
+    (m) => m.isActive || comValor(m.id),
   );
+  const algumValor = visiveis.some((m) => comValor(m.id));
+  const ativas = visiveis.filter((m) => m.isActive);
 
-  if (ativas.length < 2) return null;
+  if (ativas.length < 2 && !algumValor) return null;
 
   const mudar = (modalityId: string, centavos: string) => {
-    const proximos = {
-      ...valores,
-      [modalityId]: centavos === '0' ? '' : centavos,
-    };
-    setValores(proximos);
+    const price = centavos === '0' ? '' : centavos;
+    const proxima = lista.some((item) => item.modalityId === modalityId)
+      ? lista.map((item) =>
+          item.modalityId === modalityId ? { ...item, price } : item,
+        )
+      : [...lista, { modalityId, price }];
 
-    const lista: Array<IModalityPriceInput> = ativas.map((m) => ({
-      modalityId: m.id,
-      price: proximos[m.id] ?? '',
-    }));
-    setValue('modalityPrices' as Path<T>, lista as PathValue<T, Path<T>>, {
+    setValue('modalityPrices' as Path<T>, proxima as PathValue<T, Path<T>>, {
       shouldDirty: true,
     });
   };
@@ -84,13 +86,21 @@ export function ModalityPricesField<T extends FieldValues>({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {ativas.map((modalidade) => {
+        {visiveis.map((modalidade) => {
           const id = `preco-${modalidade.id}`;
-          const valor = valores[modalidade.id] ?? '';
+          const valor = valorDe(modalidade.id);
 
           return (
             <div key={modalidade.id} className="space-y-2">
-              <Label htmlFor={id}>{modalidade.name}</Label>
+              <Label htmlFor={id}>
+                {modalidade.name}
+                {!modalidade.isActive && (
+                  <span className="text-muted-foreground font-normal">
+                    {' '}
+                    (desativada)
+                  </span>
+                )}
+              </Label>
               <Input
                 id={id}
                 inputMode="numeric"

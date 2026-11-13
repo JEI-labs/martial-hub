@@ -75,6 +75,8 @@ export async function conferirModalidadeEPlano(
     });
   }
 
+  if (!plan.isActive) throw planoDesativado(plan.name);
+
   return { modality, plan };
 }
 
@@ -86,6 +88,13 @@ export async function descontoDaAcademia(db: Db, tenantId: string) {
   });
   return tenant?.multiModalityDiscount ?? 0;
 }
+
+/** Plano desativado não aceita matrícula nova, nem troca para ele. */
+export const planoDesativado = (nome: string) =>
+  new TRPCError({
+    code: 'BAD_REQUEST',
+    message: `O plano ${nome} está desativado e não aceita matrícula nova.`,
+  });
 
 /** A categoria fixa que recebe as mensalidades. Sem ela não há matrícula. */
 export async function categoriaDeAlunos(db: Db, tenantId: string) {
@@ -163,6 +172,7 @@ export async function matricular(
         planId: plan.id,
         price,
         discountPercent,
+        duration: plan.duration,
         startDate,
         endDate: addMonths(startDate, plan.duration),
       },

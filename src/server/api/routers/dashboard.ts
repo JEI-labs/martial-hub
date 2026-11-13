@@ -249,12 +249,10 @@ export const dashboardRouter = createTRPCRouter({
           activeStudents += 1;
 
           for (const enrollment of vigentes) {
-            /* O valor da matrícula, não o preço de hoje do plano: é o que o
-               aluno de fato paga, com o preço da modalidade e o desconto. */
-            const monthly = monthlyValue(
-              enrollment.price,
-              enrollment.plan.duration,
-            );
+            /* O valor e a duração da matrícula, não os de hoje do plano: é
+               o que o aluno de fato paga, com o preço da modalidade e o
+               desconto — e editar o plano não mexe em contrato em vigor. */
+            const monthly = monthlyValue(enrollment.price, enrollment.duration);
             mrr += monthly;
 
             const plan = byPlan.get(enrollment.plan.name) ?? {
@@ -478,7 +476,7 @@ export const dashboardRouter = createTRPCRouter({
             return (
               total +
               Array.from(porModalidade.values()).reduce(
-                (soma, e) => soma + monthlyValue(e.price, e.plan.duration),
+                (soma, e) => soma + monthlyValue(e.price, e.duration),
                 0,
               )
             );

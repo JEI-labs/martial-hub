@@ -30,8 +30,17 @@ import { installmentCount, splitIntoInstallments } from '@/utils/planUtils';
 import {
   comDesconto,
   descontosDasMatriculas,
+  vigentes,
   precoNaModalidade,
 } from '@/common/utils/pricing';
+
+/** Uma matrícula ativa do aluno, para a prévia e para filtrar modalidades. */
+export interface MatriculaDoAluno {
+  id: string;
+  modality: { id: string };
+  discountPercent: number;
+  endDate: Date | string;
+}
 
 /** A matrícula cujo plano vai trocar. */
 export interface EnrollmentToChange {
@@ -51,8 +60,12 @@ interface ChangePlanDialogProps {
    * modalidade que ele ainda não faz.
    */
   enrollment?: EnrollmentToChange | null;
-  /** Modalidades em que o aluno já está matriculado: não são oferecidas. */
-  enrolledModalityIds?: Array<string>;
+  /**
+   * As matrículas ativas do aluno. As modalidades delas não são oferecidas
+   * para matrícula nova, e as vigentes decidem o desconto da 2ª modalidade
+   * na prévia — com a mesma conta do servidor.
+   */
+  activeEnrollments?: Array<MatriculaDoAluno>;
   open: boolean;
   onOpenChange: (_open: boolean) => void;
   onChanged?: () => void;
@@ -69,7 +82,7 @@ export function ChangePlanDialog({
   studentId,
   studentName,
   enrollment,
-  enrolledModalityIds = [],
+  activeEnrollments = [],
   open,
   onOpenChange,
   onChanged,
@@ -80,7 +93,8 @@ export function ChangePlanDialog({
   const [modalityId, setModalityId] = useState('');
 
   const { data: plansData, isLoading } = api.plans.getAll.useQuery(
-    { page: 1, limit: 100 },
+    /* Só os ativos: plano desativado não aceita matrícula nova nem troca. */
+    { page: 1, limit: 100, apenasAtivos: true },
     { enabled: open },
   );
 
@@ -100,6 +114,7 @@ export function ChangePlanDialog({
   const carregandoModalidades = isEnrolling && modalidadesApi.isLoading;
   const erroModalidades =
     isEnrolling && modalidadesApi.isError && !modalidadesApi.data;
+  const enrolledModalityIds = activeEnrollments.map((e) => e.modality.id);
   const modalidadesLivres = (modalidades ?? []).filter(
     (m) => m.isActive && !enrolledModalityIds.includes(m.id),
   );
@@ -127,22 +142,23 @@ export function ChangePlanDialog({
   });
   const descontoDaAcademia = pricing?.multiModalityDiscount ?? 0;
 
-  /* A mesma conta do servidor. Na troca, a matrícula mantém o desconto se
-     já tinha; matrícula nova ganha desconto se o aluno já faz outra. */
+  /* A mesma conta do servidor (`descontosDasMatriculas`): desconto se outra
+     matrícula vigente do aluno paga cheio — na troca, sem contar a que está
+     sendo trocada. */
   const modalidadeDoPreco = enrollment?.modality.id ?? modalidadeEscolhida?.id;
   const precoCheio =
     selected && modalidadeDoPreco
       ? precoNaModalidade(selected, modalidadeDoPreco)
       : Number(selected?.price ?? 0);
-  const percent = enrollment
-    ? enrollment.discountPercent > 0
-      ? descontoDaAcademia
-      : 0
-    : (descontosDasMatriculas(
-        [precoCheio],
-        enrolledModalityIds.length,
-        descontoDaAcademia,
-      )[0] ?? 0);
+  const outras = vigentes(activeEnrollments).filter(
+    (e) => e.id !== enrollment?.id,
+  );
+  const percent =
+    descontosDasMatriculas(
+      [{ preco: precoCheio, duracao: selected?.duration ?? 1 }],
+      outras,
+      descontoDaAcademia,
+    )[0] ?? 0;
   const valor = comDesconto(precoCheio, percent);
 
   const amounts = selected

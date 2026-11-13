@@ -48,8 +48,10 @@ export function MultiModalityDiscountCard({
   if (!data) return null;
 
   const numero = Number(valor);
+  /* Até 99%: com 100 a modalidade sairia de graça, com parcelas de R$ 0
+     que ainda assim venceriam e deixariam o aluno "atrasado". */
   const valido =
-    valor !== '' && Number.isInteger(numero) && numero >= 0 && numero <= 100;
+    valor !== '' && Number.isInteger(numero) && numero >= 0 && numero <= 99;
 
   return (
     <div className="bg-card shadow-card flex flex-wrap items-end gap-x-6 gap-y-3 rounded-2xl p-5">
@@ -61,7 +63,7 @@ export function MultiModalityDiscountCard({
           <p className="font-medium">Desconto a partir da 2ª modalidade</p>
           <p className="text-muted-foreground text-sm">
             {atual > 0
-              ? `Quem faz mais de uma modalidade paga ${atual}% a menos em cada uma além da mais cara.`
+              ? `Quem faz mais de uma modalidade paga ${atual}% a menos em cada uma além da mais cara (pelo valor mensal).`
               : 'Sem desconto: cada modalidade paga o seu valor cheio.'}{' '}
             Mudar aqui vale para as matrículas novas; as que já existem
             continuam como estão.
@@ -79,7 +81,7 @@ export function MultiModalityDiscountCard({
               className="w-24"
               value={valor}
               onChange={(event) =>
-                setValor(event.target.value.replace(/\D/g, '').slice(0, 3))
+                setValor(event.target.value.replace(/\D/g, '').slice(0, 2))
               }
             />
           </div>

@@ -350,6 +350,10 @@ model Plan {
   /// Plano que já vem escolhido ao matricular. No máximo um por academia —
   /// a regra é aplicada em transação no router, não por constraint.
   isDefault   Boolean      @default(false)
+  /// Desativado sai das escolhas de matrícula nova e de troca de plano; quem
+  /// já está nele segue. É o jeito de aposentar um plano usado, que não pode
+  /// ser apagado sem levar o histórico das matrículas.
+  isActive    Boolean      @default(true)
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
@@ -419,6 +423,10 @@ model Enrollment {
   price           Float
   /// Desconto aplicado, em %. 0 é valor cheio.
   discountPercent Int   @default(0)
+  /// Meses do contrato, também retrato do dia: o MRR divide `price` por
+  /// isto. Dividir pela duração atual do plano mudava o MRR de contratos em
+  /// vigor quando alguém editava o plano.
+  duration        Int
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
   /// NoAction pelo mesmo motivo: excluir um plano apagava as matrículas nele

@@ -154,12 +154,17 @@ export function EnrollmentsField({
         : escolhidas.filter((e) => e.modalityId !== modalityId),
     );
 
-  /* A mesma conta do servidor: cheio na mais cara, desconto nas outras. */
-  const cheios = escolhidas.map((e) => {
+  /* A mesma conta do servidor: cheio na mais cara pelo valor mensal,
+     desconto nas outras. */
+  const novas = escolhidas.map((e) => {
     const plano = planos.find((p) => p.id === e.planId);
-    return plano ? precoNaModalidade(plano, e.modalityId) : 0;
+    return {
+      preco: plano ? precoNaModalidade(plano, e.modalityId) : 0,
+      duracao: plano?.duration ?? 1,
+    };
   });
-  const descontos = descontosDasMatriculas(cheios, 0, desconto);
+  const cheios = novas.map((n) => n.preco);
+  const descontos = descontosDasMatriculas(novas, [], desconto);
   const valorDe = (modalityId: string) => {
     const index = escolhidas.findIndex((e) => e.modalityId === modalityId);
     const plano = planos.find((p) => p.id === escolhidas[index]?.planId);

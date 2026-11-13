@@ -40,7 +40,12 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
 }) => {
   const { toast } = useToast();
 
-  const plansApi = api.plans.getAll.useQuery({ page: 1, limit: 100 });
+  /* Só os ativos: plano desativado não aceita matrícula nova. */
+  const plansApi = api.plans.getAll.useQuery({
+    page: 1,
+    limit: 100,
+    apenasAtivos: true,
+  });
   const { data: pricing } = api.plans.getPricingSettings.useQuery();
   const { data: plansData } = plansApi;
   const defaultPlanId = plansData?.data.find((plan) => plan.isDefault)?.id;

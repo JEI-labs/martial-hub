@@ -34,6 +34,7 @@ import {
   enrollmentInclude,
   enrollmentModalitySelect,
   matricular,
+  planoDesativado,
 } from '@/server/enrollments';
 import { deriveStudentStatus } from '@/server/utils/studentStatus';
 
@@ -78,10 +79,11 @@ export const studentRouter = createTRPCRouter({
       /* Desconto da 2ª modalidade em diante: aluno novo paga cheio na mais
          cara e ganha desconto nas outras. */
       const descontos = descontosDasMatriculas(
-        pedidas.map(({ modality, plan }) =>
-          precoNaModalidade(plan, modality.id),
-        ),
-        0,
+        pedidas.map(({ modality, plan }) => ({
+          preco: precoNaModalidade(plan, modality.id),
+          duracao: plan.duration,
+        })),
+        [],
         await descontoDaAcademia(ctx.prisma, tenantId),
       );
 
@@ -181,13 +183,25 @@ export const studentRouter = createTRPCRouter({
           });
         }
 
-        /* Quem já faz outra modalidade ganha o desconto nesta. */
-        const ativas = await tx.enrollment.count({
-          where: { studentId: student.id, isActive: true },
+        /* Desconto só se outra matrícula vigente do aluno paga cheio (ver
+           `descontosDasMatriculas`): vencida não conta, e sem ninguém
+           pagando cheio esta é que paga. */
+        const outras = await tx.enrollment.findMany({
+          where: {
+            studentId: student.id,
+            isActive: true,
+            endDate: { gte: new Date() },
+          },
+          select: { discountPercent: true },
         });
         const [discountPercent = 0] = descontosDasMatriculas(
-          [precoNaModalidade(plan, modality.id)],
-          ativas,
+          [
+            {
+              preco: precoNaModalidade(plan, modality.id),
+              duracao: plan.duration,
+            },
+          ],
+          outras,
           await descontoDaAcademia(tx, tenantId),
         );
 
@@ -655,21 +669,41 @@ export const studentRouter = createTRPCRouter({
         });
       }
 
+      if (!plan.isActive) throw planoDesativado(plan.name);
+
       const category = await categoriaDeAlunos(ctx.prisma, tenantId);
       const startDate = new Date();
 
-      /* A troca continua o contrato daquela modalidade: se ela era a que
-         tinha desconto de 2ª modalidade, a nova também tem, no desconto de
-         hoje da academia. Recalcular pelas outras ativas daria desconto às
-         duas quando o aluno troca o plano da que paga cheio. */
-      const discountPercent =
-        current.discountPercent > 0
-          ? await descontoDaAcademia(ctx.prisma, tenantId)
-          : 0;
+      const percent = await descontoDaAcademia(ctx.prisma, tenantId);
 
       try {
         const result = await ctx.prisma.$transaction(async (tx) => {
           const cancelled = await encerrarMatricula(tx, current.id, startDate);
+
+          /* A mesma regra da matrícula nova, olhando as outras vigentes do
+             aluno: se alguma paga cheio, esta tem desconto; se não (a que
+             pagava cheio foi cancelada, ou é esta), esta paga cheio. Manter
+             o desconto só porque a velha tinha deixava o aluno sem nenhuma
+             modalidade a preço cheio. */
+          const outras = await tx.enrollment.findMany({
+            where: {
+              studentId: current.student.id,
+              isActive: true,
+              endDate: { gte: startDate },
+              id: { not: current.id },
+            },
+            select: { discountPercent: true },
+          });
+          const [discountPercent = 0] = descontosDasMatriculas(
+            [
+              {
+                preco: precoNaModalidade(plan, current.modality.id),
+                duracao: plan.duration,
+              },
+            ],
+            outras,
+            percent,
+          );
 
           /* Mesma modalidade, mesmo que ela tenha sido desativada depois: a
              troca de plano continua o contrato, não é matrícula nova. */

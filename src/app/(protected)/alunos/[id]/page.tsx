@@ -732,7 +732,7 @@ export default function StudentDetailPage({
         studentId={student.id}
         studentName={student.name}
         enrollment={changePlanFor}
-        enrolledModalityIds={ativas.map((e) => e.modality.id)}
+        activeEnrollments={ativas}
         open={changePlanOpen}
         onOpenChange={setChangePlanOpen}
         onChanged={refetch}
