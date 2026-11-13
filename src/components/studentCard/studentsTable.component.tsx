@@ -191,10 +191,21 @@ export function StudentsTable({
                 </TableCell>
 
                 <TableCell>
-                  <GraduationBadge
-                    graduation={student.graduation}
-                    showLabel={false}
-                  />
+                  {/* Uma fita por modalidade; o nome de cada uma vem no
+                      título da fita. */}
+                  {student.currentGraduations.length === 0 ? (
+                    <GraduationBadge graduation={null} />
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {student.currentGraduations.map((graduation) => (
+                        <GraduationBadge
+                          key={`${graduation.modality?.name}-${graduation.name}`}
+                          graduation={graduation}
+                          showLabel={false}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </TableCell>
 
                 <TableCell className="text-muted-foreground whitespace-nowrap">

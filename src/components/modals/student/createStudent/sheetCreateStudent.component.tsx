@@ -1,9 +1,5 @@
 'use client';
 
-import {
-  GraduationBadge,
-  nomeDaFaixa,
-} from '@/components/graduationBadge/graduationBadge.component';
 import { useFaixasDisponiveis } from '@/components/graduationBadge/useFaixasDisponiveis';
 import { FormModal } from '@/components/formModal/formModal.component';
 
@@ -30,7 +26,6 @@ import {
 } from '@/server/validations/students';
 import { blobUrlToBase64 } from '@/common/utils/files';
 import { AvatarField } from '@/components/forms/avatarField/avatarField.component';
-import { FormSelectComponent } from '@/components/forms/formSelectInput/formSelectInput.component';
 import { getInitials } from '@/utils/masksUtils';
 
 export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
@@ -50,16 +45,9 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
   const { data: plansData } = plansApi;
   const defaultPlanId = plansData?.data.find((plan) => plan.isDefault)?.id;
 
-  /* As faixas das modalidades ativas que têm faixa. Boxe e afins não entram,
-     e academia sem nenhuma não mostra o campo. */
-  const { modalidades: comFaixas, variasModalidades } = useFaixasDisponiveis();
-  const opcoesDeGraduacao = comFaixas.flatMap((modalidade) =>
-    modalidade.graduations.map((faixa) => ({
-      value: faixa.id,
-      textValue: nomeDaFaixa(faixa, { comModalidade: variasModalidades }),
-      icon: <GraduationBadge graduation={faixa} showLabel={false} />,
-    })),
-  );
+  /* O catálogo de faixas de cada modalidade ativa que tem faixa: a faixa
+     com que o aluno chega é escolhida na linha da modalidade. */
+  const { modalidades: comFaixas } = useFaixasDisponiveis();
 
   const createUser = api.student.create.useMutation();
   const updateUser = api.student.updateAvatar.useMutation();
@@ -72,13 +60,18 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
   });
 
   /* As modalidades ativas, na ordem da academia: cada uma pode virar uma
-     matrícula, tenha faixa ou não (boxe também se matricula). */
+     matrícula, tenha faixa ou não (boxe também se matricula), e leva junto
+     o catálogo de faixas dela, quando tem. */
   const modalidadesApi = api.modalities.list.useQuery(undefined, {
     staleTime: 60_000,
   });
   const modalidadesAtivas = (modalidadesApi.data ?? [])
     .filter((m) => m.isActive)
-    .map(({ id, name }) => ({ id, name }));
+    .map(({ id, name }) => ({
+      id,
+      name,
+      graduations: comFaixas.find((m) => m.id === id)?.graduations ?? [],
+    }));
   const enrollmentsError =
     form.formState.errors.enrollments?.message ??
     form.formState.errors.enrollments?.root?.message ??
@@ -230,19 +223,6 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
             open={isOpen}
             error={enrollmentsError}
           />
-
-          {opcoesDeGraduacao.length > 0 && (
-            <FormSelectComponent
-              control={form.control}
-              name="graduationId"
-              label="Graduação"
-              tooltip="Faixa atual do aluno. Pode ficar em branco até a primeira graduação."
-              placeholder="Sem graduação"
-              /* aluno novo entra sem graduação, e dá para voltar a esse estado */
-              hasEmptyOption
-              options={opcoesDeGraduacao}
-            />
-          )}
         </section>
       </FormModal>
     </Form>
