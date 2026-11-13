@@ -22,9 +22,11 @@ import {
   conferirFaixa,
   faixasAtuais,
   maisRecentesPrimeiro,
+  faixaAtualSelect,
   studentGraduationSelect,
   traduzirFaixaSumida,
 } from '@/server/graduations';
+import { diaDe, diaDoTexto } from '@/common/utils/dia';
 import {
   descontosDasMatriculas,
   precoNaModalidade,
@@ -142,7 +144,7 @@ export const studentRouter = createTRPCRouter({
               data: faixas.map((graduationId) => ({
                 studentId: student.id,
                 graduationId,
-                awardedAt: startDate,
+                awardedAt: diaDe(startDate),
                 userId,
               })),
             });
@@ -191,6 +193,16 @@ export const studentRouter = createTRPCRouter({
         tenantId,
         input,
       );
+      /* A faixa com que ele chega nesta modalidade, quando veio — como no
+         cadastro. Antes o campo era aceito e jogado fora em silêncio. */
+      if (input.graduationId) {
+        await conferirFaixa(
+          ctx.prisma,
+          tenantId,
+          input.graduationId,
+          modality.id,
+        );
+      }
       const category = await categoriaDeAlunos(ctx.prisma, tenantId);
 
       return ctx.prisma.$transaction(async (tx) => {
@@ -246,6 +258,21 @@ export const studentRouter = createTRPCRouter({
           categoryId: category.id,
           discountPercent,
         });
+
+        if (input.graduationId) {
+          await tx.studentGraduation
+            .create({
+              data: {
+                studentId: student.id,
+                graduationId: input.graduationId,
+                awardedAt: diaDe(),
+                userId,
+              },
+            })
+            .catch((err: unknown) => {
+              throw traduzirFaixaSumida(err);
+            });
+        }
 
         return { ok: true, enrollmentId: enrollment.id, installments };
       });
@@ -350,104 +377,151 @@ export const studentRouter = createTRPCRouter({
     .mutation(async ({ input, ctx }) => {
       const { tenantId } = ctx;
 
-      const student = await ctx.prisma.student.findFirst({
-        where: { id: input.studentId, tenantId },
-        select: {
-          id: true,
-          name: true,
-          enrollments: {
-            where: { isActive: true },
-            select: { modalityId: true },
-          },
-          graduations: { select: studentGraduationSelect },
-        },
-      });
-
-      if (!student) {
-        throw new TRPCError({
-          code: 'NOT_FOUND',
-          message: 'Aluno não encontrado.',
-        });
-      }
-
       const faixa = await conferirFaixa(
         ctx.prisma,
         tenantId,
         input.graduationId,
       );
 
-      if (
-        !student.enrollments.some((e) => e.modalityId === faixa.modality.id)
-      ) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: `${student.name} não está matriculado em ${faixa.modality.name}.`,
-        });
-      }
-
-      const atual = faixasAtuais(student.graduations).find(
-        (registro) => registro.graduation.modality.id === faixa.modality.id,
-      );
-      if (atual?.graduation.id === faixa.id) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: `${student.name} já está na faixa ${faixa.name}.`,
-        });
-      }
-
+      /* Um dia do calendário (`@db.Date`): o de hoje em São Paulo, ou o
+         digitado. O schema já recusou data que não existe. */
       const awardedAt = input.awardedAt
-        ? convertToDate(input.awardedAt)
-        : new Date();
+        ? diaDoTexto(input.awardedAt)!
+        : diaDe();
 
-      if (awardedAt.getTime() > Date.now()) {
+      if (awardedAt > diaDe()) {
         throw new TRPCError({
           code: 'BAD_REQUEST',
           message: 'A data da graduação não pode ser no futuro.',
         });
       }
 
-      await ctx.prisma.studentGraduation.create({
-        data: {
-          studentId: student.id,
-          graduationId: faixa.id,
-          awardedAt,
-          note: input.note || null,
-          userId: ctx.session.user.id,
-        },
-      });
+      return ctx.prisma
+        .$transaction(async (tx) => {
+          /* Uma graduação por vez por aluno: o lock na linha dele faz a
+             segunda chamada simultânea esperar a primeira e já enxergar a
+             faixa nova — duas pessoas registrando a mesma faixa não deixam
+             dois registros iguais no histórico. */
+          await tx.$executeRaw`SELECT 1 FROM "Student" WHERE "id" = ${input.studentId} AND "tenantId" = ${tenantId} FOR UPDATE`;
 
-      return { message: 'Graduação registrada com sucesso' };
+          const student = await tx.student.findFirst({
+            where: { id: input.studentId, tenantId },
+            select: {
+              id: true,
+              name: true,
+              enrollments: {
+                where: { isActive: true },
+                select: { modalityId: true },
+              },
+              graduations: {
+                where: { graduation: { modalityId: faixa.modality.id } },
+                select: faixaAtualSelect,
+              },
+            },
+          });
+
+          if (!student) {
+            throw new TRPCError({
+              code: 'NOT_FOUND',
+              message: 'Aluno não encontrado.',
+            });
+          }
+
+          if (
+            !student.enrollments.some((e) => e.modalityId === faixa.modality.id)
+          ) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `${student.name} não está matriculado em ${faixa.modality.name}.`,
+            });
+          }
+
+          const [atual] = maisRecentesPrimeiro(student.graduations);
+          if (atual?.graduation.id === faixa.id) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `${student.name} já está na faixa ${faixa.name}.`,
+            });
+          }
+
+          await tx.studentGraduation.create({
+            data: {
+              studentId: student.id,
+              graduationId: faixa.id,
+              awardedAt,
+              note: input.note || null,
+              userId: ctx.session.user.id,
+            },
+          });
+
+          return { message: 'Graduação registrada com sucesso' };
+        })
+        .catch((err: unknown) => {
+          throw traduzirFaixaSumida(err);
+        });
     }),
 
   /**
-   * Desfaz a graduação mais recente do aluno numa modalidade — é a correção
-   * de um lançamento errado. A faixa anterior volta a ser a atual; sem
-   * anterior, o aluno fica sem faixa ali.
+   * Remove um registro do histórico — qualquer um, não só o mais recente: um
+   * exame lançado com o ano errado vai parar no fundo da lista e precisa sair
+   * sem levar junto as graduações certas que vieram depois.
+   *
+   * Só em modalidade que o aluno faz hoje. Quem cancelou mantém o histórico,
+   * e o que se apagasse ali não teria como voltar: graduar exige matrícula
+   * ativa.
    */
-  undoLastGraduation: teacherProcedure
-    .input(z.object({ studentId: z.string(), modalityId: z.string() }))
+  removeGraduation: teacherProcedure
+    .input(z.object({ id: z.string() }))
     .mutation(async ({ input, ctx }) => {
-      const historico = await ctx.prisma.studentGraduation.findMany({
-        where: {
-          studentId: input.studentId,
-          student: { tenantId: ctx.tenantId },
-          graduation: { modalityId: input.modalityId },
+      const registro = await ctx.prisma.studentGraduation.findFirst({
+        where: { id: input.id, student: { tenantId: ctx.tenantId } },
+        select: {
+          id: true,
+          graduation: {
+            select: { modality: { select: { id: true, name: true } } },
+          },
+          student: {
+            select: {
+              enrollments: {
+                where: { isActive: true },
+                select: { modalityId: true },
+              },
+            },
+          },
         },
-        select: studentGraduationSelect,
       });
 
-      const [ultima] = maisRecentesPrimeiro(historico);
-
-      if (!ultima) {
+      if (!registro) {
         throw new TRPCError({
           code: 'NOT_FOUND',
-          message: 'O aluno não tem graduação nesta modalidade.',
+          message: 'Esta graduação já não está no histórico.',
         });
       }
 
-      await ctx.prisma.studentGraduation.delete({ where: { id: ultima.id } });
+      const { modality } = registro.graduation;
+      if (
+        !registro.student.enrollments.some((e) => e.modalityId === modality.id)
+      ) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: `O aluno não faz mais ${modality.name}: o histórico dela fica como está.`,
+        });
+      }
 
-      return { message: 'Graduação desfeita' };
+      /* deleteMany e não delete: dois cliques (ou duas telas) removendo o
+         mesmo registro não estouram P2025 no segundo — ele só não acha. */
+      const { count } = await ctx.prisma.studentGraduation.deleteMany({
+        where: { id: registro.id },
+      });
+
+      if (count === 0) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Esta graduação já não está no histórico.',
+        });
+      }
+
+      return { message: 'Graduação removida' };
     }),
 
   getAll: protectedProcedure
@@ -500,7 +574,7 @@ export const studentRouter = createTRPCRouter({
                 include: enrollmentInclude,
                 orderBy: { modality: { position: 'asc' } },
               },
-              graduations: { select: studentGraduationSelect },
+              graduations: { select: faixaAtualSelect },
             },
           }),
           // precisa dos mesmos filtros do findMany: contando só por tenantId,
@@ -628,15 +702,19 @@ export const studentRouter = createTRPCRouter({
       const sum = (items: Array<{ amount: Prisma.Decimal }>) =>
         items.reduce((acc, item) => acc + Number(item.amount), 0);
 
+      /* O histórico cru sai do `...`: ele já vai, ordenado, em
+         `graduationHistory`, e ia duas vezes. */
+      const { graduations, ...dados } = student;
+
       return {
         data: {
-          ...student,
+          ...dados,
           status: deriveStudentStatus(student.payments, activeEnrollments),
           activeEnrollments,
           /* A faixa atual em cada modalidade e o histórico inteiro, do mais
              recente para o mais antigo. */
-          currentGraduations: faixasAtuais(student.graduations),
-          graduationHistory: maisRecentesPrimeiro(student.graduations),
+          currentGraduations: faixasAtuais(graduations),
+          graduationHistory: maisRecentesPrimeiro(graduations),
           totals: {
             paidCount: paid.length,
             pendingCount: pending.length,

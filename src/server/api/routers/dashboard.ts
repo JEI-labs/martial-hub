@@ -2,7 +2,7 @@
 import { createTRPCRouter, protectedProcedure } from '@/server/api/trpc';
 import { deriveStudentStatus } from '@/server/utils/studentStatus';
 import { monthlyValue } from '@/utils/planUtils';
-import { faixasAtuais, studentGraduationSelect } from '@/server/graduations';
+import { faixasAtuais, faixaAtualSelect } from '@/server/graduations';
 import type { StudentStatus } from '@/server/utils/studentStatus';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
@@ -145,7 +145,7 @@ export const dashboardRouter = createTRPCRouter({
                 orderBy: { startDate: 'desc' },
               },
               payments: { orderBy: { dueDate: 'asc' } },
-              graduations: { select: studentGraduationSelect },
+              graduations: { select: faixaAtualSelect },
             },
           }),
           ctx.prisma.financeEntry.findMany({
@@ -176,7 +176,9 @@ export const dashboardRouter = createTRPCRouter({
           /* O gráfico de graduação é por modalidade, e só das que têm
                faixa: boxe não tem o que mostrar. */
           ctx.prisma.modality.findMany({
-            where: { tenantId, graduations: { some: {} } },
+            /* Desativada fica de fora: sem matrícula nova, ela abriria o
+               painel num gráfico vazio e ocuparia o seletor. */
+            where: { tenantId, isActive: true, graduations: { some: {} } },
             orderBy: [{ position: 'asc' }, { name: 'asc' }],
             /* O slug decide se o eixo diz o grau ("4º") ou o nome da faixa. */
             select: { id: true, name: true, slug: true },

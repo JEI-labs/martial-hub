@@ -337,8 +337,10 @@ model Graduation {
 model StudentGraduation {
   id        String   @id @default(uuid())
   /// O dia em que a faixa foi dada. Pode ser anterior ao registro: o
-  /// professor lança o exame da semana passada.
-  awardedAt DateTime @default(now())
+  /// professor lança o exame da semana passada. Um dia do calendário, não um
+  /// instante (`src/common/utils/dia.ts`): dois registros do mesmo dia
+  /// desempatam por `createdAt`, e a data não muda com o fuso de quem olha.
+  awardedAt DateTime @default(now()) @db.Date
   /// "Exame de março", "graduação por mérito"…
   note      String?
   createdAt DateTime @default(now())

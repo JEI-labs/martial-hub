@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { diaDoTexto } from '@/common/utils/dia';
+
 /** Uma matrícula pedida no cadastro: a modalidade e o plano dela. */
 export const enrollmentRequestSchema = z.object({
   modalityId: z.string().uuid('Escolha a modalidade'),
@@ -100,6 +102,8 @@ export const awardGraduationSchema = z.object({
   awardedAt: z
     .string()
     .regex(/^\d{2}\/\d{2}\/\d{4}$/, 'Use DD/MM/AAAA')
+    /* A regex aceita 31/02 e 45/13: a data tem de existir. */
+    .refine((texto) => diaDoTexto(texto) !== null, 'Data inválida')
     .optional()
     .or(z.literal('')),
   note: z.string().trim().max(120, 'Observação muito longa').optional(),

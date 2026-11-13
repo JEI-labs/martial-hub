@@ -25,6 +25,17 @@ export const studentGraduationSelect = {
   user: { select: { name: true } },
 } satisfies Prisma.StudentGraduationSelect;
 
+/**
+ * Só o que é preciso para achar a faixa atual (`faixasAtuais`): a lista e o
+ * painel não mostram quem registrou nem a observação, e carregar o join de
+ * usuário de todo o histórico de todo aluno só para isso era desperdício.
+ */
+export const faixaAtualSelect = {
+  awardedAt: true,
+  createdAt: true,
+  graduation: { select: graduationSelect },
+} satisfies Prisma.StudentGraduationSelect;
+
 type Registro = {
   awardedAt: Date;
   createdAt: Date;

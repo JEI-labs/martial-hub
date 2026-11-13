@@ -9,7 +9,7 @@
 -- 1. O histórico.
 CREATE TABLE "StudentGraduation" (
     "id" TEXT NOT NULL,
-    "awardedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "awardedAt" DATE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "note" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "studentId" TEXT NOT NULL,
@@ -31,10 +31,16 @@ ALTER TABLE "StudentGraduation" ADD CONSTRAINT "StudentGraduation_graduationId_f
 ALTER TABLE "StudentGraduation" ADD CONSTRAINT "StudentGraduation_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- 2. A faixa de hoje vira o primeiro registro. O dia em que ela foi dada
--- nunca foi guardado: fica a última alteração do aluno, que é o mais perto
--- que existe, e a observação diz de onde veio.
+-- nunca foi guardado, e a observação diz isso. Fica o dia do cadastro do
+-- aluno, e não o da última alteração: a faixa atual é o registro mais
+-- recente, e uma data inventada recente (a troca do avatar na semana
+-- passada) passaria na frente de um exame real lançado depois com a data
+-- verdadeira. Com a data mais antiga possível, qualquer lançamento real
+-- vence. O dia é o do calendário de São Paulo, como os que o sistema grava.
 INSERT INTO "StudentGraduation" ("id", "awardedAt", "note", "studentId", "graduationId")
-SELECT gen_random_uuid(), s."updatedAt", 'Faixa registrada antes do histórico de graduações', s."id", s."graduationId"
+SELECT gen_random_uuid(),
+       (s."createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo')::DATE,
+       'Faixa registrada antes do histórico de graduações', s."id", s."graduationId"
 FROM "Student" s
 WHERE s."graduationId" IS NOT NULL;
 

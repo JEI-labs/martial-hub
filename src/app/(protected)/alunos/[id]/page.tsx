@@ -326,7 +326,6 @@ export default function StudentDetailPage({
           studentName={student.name}
           activeModalityIds={ativas.map((e) => e.modality.id)}
           history={student.graduationHistory}
-          onUpdated={refetch}
         />
       </div>
 

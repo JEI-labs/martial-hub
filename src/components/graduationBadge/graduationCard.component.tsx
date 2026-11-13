@@ -1,14 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { format } from 'date-fns';
 import {
   Award,
   ChevronDown,
   ChevronUp,
   Loader2,
   RotateCw,
-  Undo2,
+  Trash2,
 } from 'lucide-react';
 
 import {
@@ -17,7 +16,18 @@ import {
   type GraduationView,
 } from './graduationBadge.component';
 import { useFaixasDisponiveis } from './useFaixasDisponiveis';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { diaDe, formatarDia } from '@/common/utils/dia';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
@@ -56,11 +66,11 @@ interface GraduationCardProps {
   activeModalityIds: Array<string>;
   /** Todo o histórico, do mais recente para o mais antigo. */
   history: Array<GraduationRecord>;
-  onUpdated?: () => void;
 }
 
-const hoje = () => format(new Date(), 'dd/MM/yyyy');
-const dataCurta = (data: Date | string) => format(new Date(data), 'dd/MM/yyyy');
+/* Datas de graduação são dias do calendário (`@db.Date`): "hoje" é o de São
+   Paulo, e a leitura é em UTC, para não voltar um dia no Brasil. */
+const hoje = () => formatarDia(diaDe());
 
 /**
  * A graduação do aluno, modalidade a modalidade: a faixa atual de cada uma,
@@ -72,7 +82,6 @@ export function GraduationCard({
   studentName,
   activeModalityIds,
   history,
-  onUpdated,
 }: GraduationCardProps) {
   const { toast } = useToast();
   const utils = api.useUtils();
@@ -81,6 +90,7 @@ export function GraduationCard({
   const [selected, setSelected] = useState<string | null>(null);
   const [awardedAt, setAwardedAt] = useState(hoje);
   const [note, setNote] = useState('');
+  const [removendo, setRemovendo] = useState<GraduationRecord | null>(null);
 
   const {
     modalidades: catalogo,
@@ -90,10 +100,12 @@ export function GraduationCard({
     refetch,
   } = useFaixasDisponiveis();
 
+  /* Só a ficha deste aluno e o painel: invalidar todo `student` refazia
+     também cada página da lista em cache, e um refetch à parte do detalhe
+     buscava a ficha duas vezes. */
   const depois = () => {
-    utils.student.invalidate();
-    utils.dashboard.invalidate();
-    onUpdated?.();
+    void utils.student.getDetailsByID.invalidate({ id: studentId });
+    void utils.dashboard.invalidate();
   };
 
   const award = api.student.awardGraduation.useMutation({
@@ -110,14 +122,15 @@ export function GraduationCard({
       }),
   });
 
-  const undo = api.student.undoLastGraduation.useMutation({
+  const remove = api.student.removeGraduation.useMutation({
     onSuccess: () => {
-      toast({ title: 'Graduação desfeita' });
+      toast({ title: 'Graduação removida do histórico' });
+      setRemovendo(null);
       depois();
     },
     onError: (error) =>
       toast({
-        title: 'Não deu para desfazer',
+        title: 'Não deu para remover',
         description: error.message,
         variant: 'destructive',
       }),
@@ -262,7 +275,7 @@ export function GraduationCard({
 
                 {expandida && (
                   <ol className="border-border ml-1 space-y-2 border-l pl-3">
-                    {registros.map((registro, index) => (
+                    {registros.map((registro) => (
                       <li key={registro.id} className="space-y-0.5">
                         <div className="flex items-center gap-2">
                           <GraduationBadge
@@ -274,25 +287,25 @@ export function GraduationCard({
                           </span>
                         </div>
                         <p className="text-muted-foreground text-xs">
-                          {dataCurta(registro.awardedAt)}
+                          {formatarDia(registro.awardedAt)}
                           {registro.user ? ` · por ${registro.user.name}` : ''}
                           {registro.note ? ` · ${registro.note}` : ''}
                         </p>
-                        {index === 0 && (
+                        {/* Qualquer registro, não só o mais recente: um
+                            exame lançado com o ano errado fica no fundo da
+                            lista. Só onde o aluno ainda está matriculado —
+                            quem cancelou mantém o histórico, e o que se
+                            apagasse ali não teria como voltar. */}
+                        {activeModalityIds.includes(modalidade.id) && (
                           <Button
                             size="sm"
                             variant="ghost"
                             className="text-muted-foreground h-7 px-2 text-xs"
-                            disabled={undo.isPending}
-                            onClick={() =>
-                              undo.mutate({
-                                studentId,
-                                modalityId: modalidade.id,
-                              })
-                            }
+                            disabled={remove.isPending}
+                            onClick={() => setRemovendo(registro)}
                           >
-                            <Undo2 className="mr-1 size-3" />
-                            Desfazer esta graduação
+                            <Trash2 className="mr-1 size-3" />
+                            Remover do histórico
                           </Button>
                         )}
                       </li>
@@ -407,6 +420,41 @@ export function GraduationCard({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={Boolean(removendo)}
+        onOpenChange={(open) =>
+          !open && !remove.isPending && setRemovendo(null)
+        }
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover esta graduação?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {removendo
+                ? `${removendo.graduation.name} em ${removendo.graduation.modality.name}, de ${formatarDia(removendo.awardedAt)}, sai do histórico de ${studentName}. `
+                : ''}
+              Se era a faixa atual, a anterior volta a ser. Não dá para
+              desfazer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={remove.isPending}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={remove.isPending}
+              onClick={(event) => {
+                /* Fecha só quando o servidor responder. */
+                event.preventDefault();
+                if (removendo) remove.mutate({ id: removendo.id });
+              }}
+            >
+              {remove.isPending ? 'Removendo...' : 'Remover'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

@@ -14,6 +14,7 @@ const { studentRouter } = await import('./students');
 const { plansRouter } = await import('./plans');
 const { modalitiesRouter } = await import('./modalities');
 const { dashboardRouter } = await import('./dashboard');
+const { diaDe, diaDoTexto, formatarDia } = await import('@/common/utils/dia');
 
 const createCaller = createCallerFactory(
   createTRPCRouter({
@@ -209,7 +210,61 @@ describe('graduar e o histórico', () => {
     ]);
   });
 
-  it('desfazer a última volta à anterior; sem nenhuma, avisa', async () => {
+  it('graduar hoje pela tela (com a data digitada) vira a faixa atual', async () => {
+    /* É o que o diálogo manda: a data de hoje em dd/mm/aaaa, não vazio. O
+       registro do cadastro, do mesmo dia, não pode continuar na frente. */
+    const mt1 = await a.faixa(a.muayThai.id, 0);
+    const mt3 = await a.faixa(a.muayThai.id, 2);
+    const aluno = await cadastrar(a, [
+      { modalityId: a.muayThai.id, graduationId: mt1.id },
+    ]);
+
+    await a.caller.student.awardGraduation({
+      studentId: aluno.id,
+      graduationId: mt3.id,
+      awardedAt: formatarDia(diaDe()),
+    });
+
+    const { currentGraduations, graduationHistory } = await ficha(a, aluno.id);
+    expect(currentGraduations[0]?.graduation.name).toBe('Vermelho');
+    /* O mesmo dia nos dois, guardado como dia (meia-noite UTC). */
+    expect(graduationHistory.map((r) => r.awardedAt.toISOString())).toEqual([
+      diaDe().toISOString(),
+      diaDe().toISOString(),
+    ]);
+  });
+
+  it('remove um registro antigo errado sem mexer na faixa atual', async () => {
+    const mt1 = await a.faixa(a.muayThai.id, 0);
+    const mt2 = await a.faixa(a.muayThai.id, 1);
+    const mt3 = await a.faixa(a.muayThai.id, 2);
+    const aluno = await cadastrar(a, [
+      { modalityId: a.muayThai.id, graduationId: mt1.id },
+    ]);
+    await a.caller.student.awardGraduation({
+      studentId: aluno.id,
+      graduationId: mt3.id,
+    });
+    /* O ano errado: 2015 em vez de 2025. Vai para o fundo do histórico. */
+    await a.caller.student.awardGraduation({
+      studentId: aluno.id,
+      graduationId: mt2.id,
+      awardedAt: '10/01/2015',
+    });
+    const errado = (await ficha(a, aluno.id)).graduationHistory.at(-1)!;
+    expect(errado.graduation.name).toBe('Vermelho e Branco');
+
+    await a.como(EUserRole.TEACHER).student.removeGraduation({ id: errado.id });
+
+    const { currentGraduations, graduationHistory } = await ficha(a, aluno.id);
+    expect(currentGraduations[0]?.graduation.name).toBe('Vermelho');
+    expect(graduationHistory.map((r) => r.graduation.name)).toEqual([
+      'Vermelho',
+      'Branco',
+    ]);
+  });
+
+  it('remover a atual volta à anterior; remover de novo avisa', async () => {
     const mt1 = await a.faixa(a.muayThai.id, 0);
     const mt2 = await a.faixa(a.muayThai.id, 1);
     const aluno = await cadastrar(a, [
@@ -219,25 +274,23 @@ describe('graduar e o histórico', () => {
       studentId: aluno.id,
       graduationId: mt2.id,
     });
+    const [atual] = (await ficha(a, aluno.id)).graduationHistory;
 
-    await a.caller.student.undoLastGraduation({
-      studentId: aluno.id,
-      modalityId: a.muayThai.id,
-    });
+    /* Dois cliques ao mesmo tempo: um remove, o outro só não acha. */
+    const resultados = await Promise.allSettled([
+      a.caller.student.removeGraduation({ id: atual!.id }),
+      a.caller.student.removeGraduation({ id: atual!.id }),
+    ]);
+    expect(resultados.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(
+      resultados
+        .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+        .map((r) => (r.reason as { code?: string }).code),
+    ).toEqual(['NOT_FOUND']);
+
     expect(
       (await ficha(a, aluno.id)).currentGraduations[0]?.graduation.name,
     ).toBe('Branco');
-
-    await a.caller.student.undoLastGraduation({
-      studentId: aluno.id,
-      modalityId: a.muayThai.id,
-    });
-    await expect(
-      a.caller.student.undoLastGraduation({
-        studentId: aluno.id,
-        modalityId: a.muayThai.id,
-      }),
-    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('graduar no jiu-jitsu não mexe no muay thai', async () => {
@@ -362,6 +415,107 @@ describe('gráfico do painel', () => {
           [null, 1],
         ],
       ],
+    ]);
+  });
+});
+
+describe('datas da graduação', () => {
+  it('data que não existe é recusada, em vez de virar outra', async () => {
+    const mt2 = await a.faixa(a.muayThai.id, 1);
+    const aluno = await cadastrar(a, [{ modalityId: a.muayThai.id }]);
+
+    for (const awardedAt of ['31/02/2026', '45/13/2026']) {
+      await expect(
+        a.caller.student.awardGraduation({
+          studentId: aluno.id,
+          graduationId: mt2.id,
+          awardedAt,
+        }),
+      ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    }
+    expect((await ficha(a, aluno.id)).graduationHistory).toEqual([]);
+  });
+
+  it('o dia não muda com o fuso', () => {
+    expect(diaDoTexto('10/01/2025')?.toISOString()).toBe(
+      '2025-01-10T00:00:00.000Z',
+    );
+    expect(formatarDia(new Date('2025-01-10T00:00:00Z'))).toBe('10/01/2025');
+    /* 23h30 em São Paulo ainda é o mesmo dia, embora já seja amanhã em UTC. */
+    expect(diaDe(new Date('2025-01-11T02:30:00Z')).toISOString()).toBe(
+      '2025-01-10T00:00:00.000Z',
+    );
+    expect(diaDoTexto('29/02/2025')).toBeNull();
+  });
+});
+
+describe('mais regras da graduação', () => {
+  it('duas pessoas dando a mesma faixa ao mesmo tempo: um registro só', async () => {
+    const mt2 = await a.faixa(a.muayThai.id, 1);
+    const aluno = await cadastrar(a, [{ modalityId: a.muayThai.id }]);
+
+    const resultados = await Promise.allSettled([
+      a.caller.student.awardGraduation({
+        studentId: aluno.id,
+        graduationId: mt2.id,
+      }),
+      a.caller.student.awardGraduation({
+        studentId: aluno.id,
+        graduationId: mt2.id,
+      }),
+    ]);
+
+    expect(resultados.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect((await ficha(a, aluno.id)).graduationHistory).toHaveLength(1);
+  });
+
+  it('não remove histórico de modalidade que o aluno cancelou', async () => {
+    const mt1 = await a.faixa(a.muayThai.id, 0);
+    const aluno = await cadastrar(a, [
+      { modalityId: a.muayThai.id, graduationId: mt1.id },
+      { modalityId: a.boxe.id },
+    ]);
+    const dados = await ficha(a, aluno.id);
+    const mt = dados.activeEnrollments.find(
+      (e) => e.modality.id === a.muayThai.id,
+    )!;
+    await a.caller.student.cancelEnrollment({ enrollmentId: mt.id });
+
+    await expect(
+      a.caller.student.removeGraduation({ id: dados.graduationHistory[0]!.id }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect((await ficha(a, aluno.id)).graduationHistory).toHaveLength(1);
+  });
+
+  it('matricular de novo com a faixa registra a faixa', async () => {
+    const aluno = await cadastrar(a, [{ modalityId: a.boxe.id }]);
+    const jjAzul = await a.faixa(a.jiuJitsu.id, 13);
+
+    await a.caller.student.addEnrollment({
+      studentId: aluno.id,
+      modalityId: a.jiuJitsu.id,
+      planId: a.mensal.id,
+      graduationId: jjAzul.id,
+    });
+
+    expect(
+      (await ficha(a, aluno.id)).currentGraduations.map(
+        (r) => r.graduation.name,
+      ),
+    ).toEqual(['Azul']);
+  });
+
+  it('modalidade desativada não aparece no gráfico do painel', async () => {
+    await cadastrar(a, [{ modalityId: a.boxe.id }]);
+    await a.caller.modalities.update({
+      id: a.muayThai.id,
+      name: 'Muay Thai',
+      isActive: false,
+    });
+
+    const { breakdowns } = await a.caller.dashboard.getOverview({});
+    expect(breakdowns.byGraduation.map((g) => g.modality.name)).toEqual([
+      'Jiu-Jitsu',
     ]);
   });
 });
