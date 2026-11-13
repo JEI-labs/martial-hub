@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useWatch, type Control, type UseFormSetValue } from 'react-hook-form';
 
 import { PLAN_BILLING_LABEL } from '@/common/constants/planBilling';
+import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
@@ -23,7 +24,9 @@ import type {
   IEnrollmentRequest,
   IStudentCreateTypes,
 } from '@/server/validations/students';
+import { PlanOptionLabel } from '@/components/plans/planOptionLabel.component';
 import { maskBRL } from '@/utils/masksUtils';
+import { Skeleton } from '@/components/ui/skeleton';
 
 type Modalidade = { id: string; name: string };
 type Plano = {
@@ -39,6 +42,11 @@ interface EnrollmentsFieldProps {
   control: Control<IStudentCreateTypes>;
   setValue: UseFormSetValue<IStudentCreateTypes>;
   modalidades: Array<Modalidade>;
+  /** As modalidades ainda não chegaram: lista vazia não quer dizer nada. */
+  carregando?: boolean;
+  /** A consulta das modalidades falhou; `tentarDeNovo` refaz. */
+  erro?: boolean;
+  tentarDeNovo?: () => void;
   planos: Array<Plano>;
   defaultPlanId?: string;
   /** Desconto da academia da 2ª modalidade em diante, em %. */
@@ -56,6 +64,9 @@ export function EnrollmentsField({
   control,
   setValue,
   modalidades,
+  carregando = false,
+  erro = false,
+  tentarDeNovo,
   planos,
   defaultPlanId,
   desconto,
@@ -90,6 +101,28 @@ export function EnrollmentsField({
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [defaultPlanId]);
+
+  /* "A academia não tem modalidades" só depois de saber: enquanto carrega,
+     ou se a consulta falhou, a lista vazia não diz isso. */
+  if (carregando) return <Skeleton className="h-24 w-full rounded-xl" />;
+
+  if (erro) {
+    return (
+      <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-2 rounded-xl border border-dashed p-4 text-sm">
+        <span>Não deu para carregar as modalidades da academia.</span>
+        {tentarDeNovo && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={tentarDeNovo}
+          >
+            Tentar de novo
+          </Button>
+        )}
+      </div>
+    );
+  }
 
   if (modalidades.length === 0) {
     return (
@@ -193,11 +226,10 @@ export function EnrollmentsField({
                   <SelectContent>
                     {planos.map((plano) => (
                       <SelectItem key={plano.id} value={plano.id}>
-                        {plano.name} ·{' '}
-                        {maskBRL(precoNaModalidade(plano, modalidade.id), true)}{' '}
-                        · {plano.duration}{' '}
-                        {plano.duration === 1 ? 'mês' : 'meses'} ·{' '}
-                        {PLAN_BILLING_LABEL[plano.billing]}
+                        <PlanOptionLabel
+                          plan={plano}
+                          preco={precoNaModalidade(plano, modalidade.id)}
+                        />
                       </SelectItem>
                     ))}
                   </SelectContent>

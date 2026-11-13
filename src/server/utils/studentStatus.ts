@@ -72,6 +72,16 @@ export function deriveStudentStatus(
      que estar em dia com. */
   if (activeEnrollments.length === 0) return 'SEM MATRÍCULA';
 
+  /* Dívida não some com a matrícula: as parcelas vencidas de uma modalidade
+     cancelada (ou de um plano trocado) "continuam a ser cobradas", como diz
+     o diálogo de cancelamento. Quem segue matriculado em outra modalidade e
+     deve essas parcelas está atrasado — é o que o painel já conta em
+     inadimplência. */
+  const devendo = payments.some(
+    (p) => p.status === 'PENDING' && p.dueDate < now,
+  );
+  if (devendo) return 'ATRASADO';
+
   return activeEnrollments
     .map((enrollment) => statusDaMatricula(payments, enrollment, now))
     .reduce((pior, atual) =>

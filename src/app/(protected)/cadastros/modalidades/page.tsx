@@ -34,7 +34,13 @@ export default function ModalitiesPage() {
   const { data, isLoading } = api.modalities.list.useQuery();
   const modalities = data ?? [];
 
-  const onSuccess = () => utils.modalities.list.invalidate();
+  /* As faixas vêm por modalidade (`graduations.list`): mexer na modalidade
+     muda o que o cadastro de aluno e o cartão de graduação oferecem. */
+  const onSuccess = () =>
+    Promise.all([
+      utils.modalities.list.invalidate(),
+      utils.graduations.list.invalidate(),
+    ]);
   const reorder = api.modalities.reorder.useMutation({ onSuccess });
   const remove = api.modalities.remove.useMutation({ onSuccess });
 

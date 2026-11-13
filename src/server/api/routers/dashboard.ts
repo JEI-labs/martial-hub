@@ -1,5 +1,6 @@
 // server/api/routers/painel.ts
 import { createTRPCRouter, protectedProcedure } from '@/server/api/trpc';
+import { graduationSelect } from '@/server/graduations';
 import { deriveStudentStatus } from '@/server/utils/studentStatus';
 import { monthlyValue } from '@/utils/planUtils';
 import type { StudentStatus } from '@/server/utils/studentStatus';
@@ -141,12 +142,14 @@ export const dashboardRouter = createTRPCRouter({
                 payments: { orderBy: { dueDate: 'asc' } },
                 graduation: {
                   select: {
-                    id: true,
-                    name: true,
-                    level: true,
-                    colors: true,
-                    position: true,
-                    modality: { select: { name: true, position: true } },
+                    ...graduationSelect,
+                    /* A posição da modalidade ordena as barras. */
+                    modality: {
+                      select: {
+                        ...graduationSelect.modality.select,
+                        position: true,
+                      },
+                    },
                   },
                 },
               },
@@ -206,11 +209,15 @@ export const dashboardRouter = createTRPCRouter({
           colors: Array<string>;
           position: number;
           modality: string | null;
+          /** Decide se o eixo mostra o grau ("4º") ou o nome da faixa. */
+          modalitySlug: string | null;
           modalityPosition: number;
           students: number;
         };
         const byGraduation = new Map<string, GraduationBar>();
-        const byPlan = new Map<string, { students: number; mrr: number }>();
+        /* Alunos num Set: quem faz muay thai e boxe no mesmo plano é um aluno
+           só nele, não dois — o gráfico diz "N aluno(s)". */
+        const byPlan = new Map<string, { alunos: Set<string>; mrr: number }>();
 
         let mrr = 0;
         let activeStudents = 0;
@@ -227,6 +234,7 @@ export const dashboardRouter = createTRPCRouter({
             colors: faixa?.colors ?? [],
             position: faixa?.position ?? 0,
             modality: faixa?.modality.name ?? null,
+            modalitySlug: faixa?.modality.slug ?? null,
             modalityPosition: faixa?.modality.position ?? 0,
             students: 0,
           };
@@ -250,10 +258,10 @@ export const dashboardRouter = createTRPCRouter({
             mrr += monthly;
 
             const plan = byPlan.get(enrollment.plan.name) ?? {
-              students: 0,
+              alunos: new Set<string>(),
               mrr: 0,
             };
-            plan.students += 1;
+            plan.alunos.add(student.id);
             plan.mrr += monthly;
             byPlan.set(enrollment.plan.name, plan);
           }
@@ -276,15 +284,33 @@ export const dashboardRouter = createTRPCRouter({
             s.createdAt <= previousMonthEnd,
         ).length;
 
-        /* Saída = aluno com matrícula que venceu no mês e nenhuma outra
-           vigente. Parar o boxe e seguir no muay thai não é saída. */
-        const churnedThisMonth = students.filter((student) => {
-          const endedNow = student.enrollments.some(
-            (e) => e.endDate >= monthStart && e.endDate <= monthEnd,
+        /**
+         * Saída no período: uma matrícula do aluno terminou nele e, no fim
+         * dele (ou agora, se ele ainda não acabou), o aluno não tem nenhuma
+         * vigente. Parar o boxe e seguir no muay thai não é saída, nem trocar
+         * de plano (a velha fecha e a nova abre no mesmo dia). O KPI do mês e
+         * as barras da série usam esta mesma regra, para o painel não se
+         * contradizer.
+         */
+        const saiuEntre = (
+          student: StudentRecord,
+          start: Date,
+          end: Date,
+        ): boolean => {
+          const ref = end < now ? end : now;
+          return (
+            student.enrollments.some(
+              (e) => e.endDate >= start && e.endDate <= end,
+            ) &&
+            !student.enrollments.some(
+              (e) => e.startDate <= ref && e.endDate > ref,
+            )
           );
-          if (!endedNow) return false;
-          return currentEnrollments(student).length === 0;
-        }).length;
+        };
+
+        const churnedThisMonth = students.filter((student) =>
+          saiuEntre(student, monthStart, monthEnd),
+        ).length;
 
         const activeAtMonthStart = students.filter((student) =>
           student.enrollments.some(
@@ -479,9 +505,7 @@ export const dashboardRouter = createTRPCRouter({
               (s) => s.createdAt >= bucket.start && s.createdAt <= bucket.end,
             ).length,
             churned: students.filter((student) =>
-              student.enrollments.some(
-                (e) => e.endDate >= bucket.start && e.endDate <= bucket.end,
-              ),
+              saiuEntre(student, bucket.start, bucket.end),
             ).length,
             received: allPayments
               .filter(
@@ -589,15 +613,22 @@ export const dashboardRouter = createTRPCRouter({
               (status) => ({ status, students: byStatus[status] }),
             ),
             byPlan: Array.from(byPlan.entries())
-              .map(([name, value]) => ({ name, ...value }))
+              .map(([name, { alunos, mrr }]) => ({
+                name,
+                students: alunos.size,
+                mrr,
+              }))
               .sort((a, b) => b.mrr - a.mrr),
             /* Na ordem das modalidades e, dentro de cada uma, na ordem das
-               faixas; sem graduação fica por último. */
+               faixas; sem graduação fica por último. O nome da modalidade
+               desempata como em `modalities.list`: duas na mesma posição
+               intercalariam as barras ("MT 1º, JJ Branca, MT 2º…"). */
             byGraduation: Array.from(byGraduation.values()).sort((a, b) => {
               if (a.name === null) return 1;
               if (b.name === null) return -1;
               return (
                 a.modalityPosition - b.modalityPosition ||
+                (a.modality ?? '').localeCompare(b.modality ?? '') ||
                 a.position - b.position
               );
             }),

@@ -199,22 +199,28 @@ export const plansRouter = createTRPCRouter({
         });
       }
 
-      /* A matrícula aponta para o plano em cascata: apagar um plano em uso
-         apagava junto as matrículas de quem está nele, ativas e encerradas. */
+      /* A contagem dá a mensagem com o número; quem garante é o FK da
+         matrícula (NO ACTION), que recusa no banco o que passar daqui —
+         uma matrícula feita entre a contagem e o delete, por exemplo. */
       const emUso = await ctx.prisma.enrollment.count({
         where: { planId: input.id, plan: { tenantId } },
       });
 
-      if (emUso > 0) {
-        throw new TRPCError({
-          code: 'BAD_REQUEST',
-          message: `Este plano está em ${emUso} ${emUso === 1 ? 'matrícula' : 'matrículas'}, contando as encerradas, e não pode ser apagado.`,
-        });
-      }
+      if (emUso > 0) throw planoEmUso(emUso);
 
-      await ctx.prisma.plan.delete({
-        where: { id: input.id, tenantId },
-      });
+      try {
+        await ctx.prisma.plan.delete({
+          where: { id: input.id, tenantId },
+        });
+      } catch (err) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2003'
+        ) {
+          throw planoEmUso();
+        }
+        throw err;
+      }
 
       return { ok: true };
     }),
@@ -322,3 +328,14 @@ export const plansRouter = createTRPCRouter({
       return { ok: true };
     }),
 });
+
+/** Plano com matrícula não sai: levaria o histórico de quem está nele. */
+const planoEmUso = (matriculas?: number) =>
+  new TRPCError({
+    code: 'BAD_REQUEST',
+    message: `Este plano está em ${
+      matriculas === undefined
+        ? 'matrículas de alunos'
+        : `${matriculas} ${matriculas === 1 ? 'matrícula' : 'matrículas'}`
+    }, contando as encerradas, e não pode ser apagado.`,
+  });

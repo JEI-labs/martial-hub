@@ -1,7 +1,7 @@
 'use client';
 
 import { GraduationCard } from '@/components/graduationBadge/graduationCard.component';
-import { descreverGraduacao } from '@/components/graduationBadge/graduationBadge.component';
+import { nomeDaFaixa } from '@/components/graduationBadge/graduationBadge.component';
 import { use, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { format } from 'date-fns';
@@ -376,11 +376,7 @@ export default function StudentDetailPage({
             label="Graduação"
             value={
               student.graduation
-                ? [
-                    student.graduation.modality.name,
-                    descreverGraduacao(student.graduation).split(' · ')[0],
-                    student.graduation.name,
-                  ].join(' · ')
+                ? nomeDaFaixa(student.graduation, { comModalidade: true })
                 : 'Sem graduação'
             }
           />

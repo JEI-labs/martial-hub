@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { PLAN_BILLING_LABEL } from '@/common/constants/planBilling';
+import { PlanOptionLabel } from '@/components/plans/planOptionLabel.component';
 import { useResetOnChange } from '@/hooks/useResetOnChange/useResetOnChange.hook';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/trpc/react';
@@ -90,9 +90,16 @@ export function ChangePlanDialog({
   const currentPlanId = enrollment?.planId ?? null;
   const currentPlanName = enrollment?.planName ?? null;
 
-  const { data: modalidades } = api.modalities.list.useQuery(undefined, {
+  const modalidadesApi = api.modalities.list.useQuery(undefined, {
     enabled: open && isEnrolling,
   });
+  const modalidades = modalidadesApi.data;
+  /* Na matrícula, as modalidades decidem o que dá para escolher: enquanto
+     não chegam (ou se a consulta falha), "já está matriculado em todas"
+     seria mentira. */
+  const carregandoModalidades = isEnrolling && modalidadesApi.isLoading;
+  const erroModalidades =
+    isEnrolling && modalidadesApi.isError && !modalidadesApi.data;
   const modalidadesLivres = (modalidades ?? []).filter(
     (m) => m.isActive && !enrolledModalityIds.includes(m.id),
   );
@@ -214,8 +221,20 @@ export function ChangePlanDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {isLoading ? (
+        {isLoading || carregandoModalidades ? (
           <Skeleton className="h-10 w-full" />
+        ) : erroModalidades ? (
+          <div className="text-muted-foreground flex flex-wrap items-center justify-between gap-2 text-sm">
+            <span>Não deu para carregar as modalidades da academia.</span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={modalidadesApi.isFetching}
+              onClick={() => void modalidadesApi.refetch()}
+            >
+              Tentar de novo
+            </Button>
+          </div>
         ) : (
           <div className="flex flex-col gap-4">
             {isEnrolling && (
@@ -255,15 +274,14 @@ export function ChangePlanDialog({
                 <SelectContent>
                   {options.map((plan) => (
                     <SelectItem key={plan.id} value={plan.id}>
-                      {plan.name} ·{' '}
-                      {maskBRL(
-                        modalidadeDoPreco
-                          ? precoNaModalidade(plan, modalidadeDoPreco)
-                          : Number(plan.price),
-                        true,
-                      )}{' '}
-                      · {plan.duration} {plan.duration === 1 ? 'mês' : 'meses'}{' '}
-                      · {PLAN_BILLING_LABEL[plan.billing]}
+                      <PlanOptionLabel
+                        plan={plan}
+                        preco={
+                          modalidadeDoPreco
+                            ? precoNaModalidade(plan, modalidadeDoPreco)
+                            : undefined
+                        }
+                      />
                     </SelectItem>
                   ))}
                 </SelectContent>

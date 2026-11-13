@@ -17,7 +17,11 @@ import { z } from 'zod';
 import { del } from '@vercel/blob';
 import { Prisma } from '@prisma/client';
 import { getAllStudentInputSchema } from '@/server/validations/pagination';
-import { conferirGraduacao, graduationSelect } from '@/server/graduations';
+import {
+  conferirGraduacao,
+  graduationSelect,
+  traduzirFaixaSumida,
+} from '@/server/graduations';
 import {
   descontosDasMatriculas,
   precoNaModalidade,
@@ -28,6 +32,7 @@ import {
   descontoDaAcademia,
   encerrarMatricula,
   enrollmentInclude,
+  enrollmentModalitySelect,
   matricular,
 } from '@/server/enrollments';
 import { deriveStudentStatus } from '@/server/utils/studentStatus';
@@ -114,9 +119,10 @@ export const studentRouter = createTRPCRouter({
         });
 
         return { ok: true, data: createdStudent };
-      } catch (error) {
-        console.error(error);
+      } catch (err) {
+        const error = traduzirFaixaSumida(err);
         if (error instanceof TRPCError) throw error;
+        console.error(error);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
           message: 'Não foi possível cadastrar aluno',
@@ -155,8 +161,10 @@ export const studentRouter = createTRPCRouter({
       const category = await categoriaDeAlunos(ctx.prisma, tenantId);
 
       return ctx.prisma.$transaction(async (tx) => {
-        /* Dentro da transação: dois cliques seguidos não podem abrir duas
-           matrículas ativas na mesma modalidade. */
+        /* A mensagem amigável para o caso comum. Quem garante de verdade é
+           o índice único parcial em (studentId, modalityId) das ativas: no
+           READ COMMITTED, dois pedidos simultâneos passam os dois por esta
+           busca, e o segundo insert é recusado (ver `matricular`). */
         const jaTem = await tx.enrollment.findFirst({
           where: {
             studentId: student.id,
@@ -271,22 +279,43 @@ export const studentRouter = createTRPCRouter({
         });
       }
 
-      await conferirGraduacao(ctx.prisma, tenantId, input.graduationId);
-
-      const updated = await ctx.prisma.student.update({
+      const atual = await ctx.prisma.student.findFirst({
         where: { id: input.id, tenantId },
-        data: {
-          name: input.name,
-          email: input.email,
-          phone: input.phone,
-          birthDate: birthDateFormatted,
-          /* Só quando veio: o formulário de edição não manda a graduação, e
-             gravar nulo nesse caso apagava a faixa de quem era editado. */
-          ...(input.graduationId !== undefined
-            ? { graduationId: input.graduationId }
-            : {}),
-        },
+        select: { graduationId: true },
       });
+
+      if (!atual) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Aluno não encontrado.',
+        });
+      }
+
+      await conferirGraduacao(
+        ctx.prisma,
+        tenantId,
+        input.graduationId,
+        atual.graduationId,
+      );
+
+      const updated = await ctx.prisma.student
+        .update({
+          where: { id: input.id, tenantId },
+          data: {
+            name: input.name,
+            email: input.email,
+            phone: input.phone,
+            birthDate: birthDateFormatted,
+            /* Só quando veio: o formulário de edição não manda a graduação, e
+               gravar nulo nesse caso apagava a faixa de quem era editado. */
+            ...(input.graduationId !== undefined
+              ? { graduationId: input.graduationId }
+              : {}),
+          },
+        })
+        .catch((err: unknown) => {
+          throw traduzirFaixaSumida(err);
+        });
 
       return {
         message: 'Aluno atualizado com sucesso',
@@ -313,14 +342,28 @@ export const studentRouter = createTRPCRouter({
         });
       }
 
-      await conferirGraduacao(ctx.prisma, tenantId, input.graduationId);
+      const atual = await ctx.prisma.student.findFirst({
+        where: { id: input.id, tenantId },
+        select: { graduationId: true },
+      });
+
+      await conferirGraduacao(
+        ctx.prisma,
+        tenantId,
+        input.graduationId,
+        atual?.graduationId,
+      );
 
       // updateMany para o filtro por tenant entrar no WHERE: um update
       // simples por id deixaria alterar aluno de outra academia
-      const result = await ctx.prisma.student.updateMany({
-        where: { id: input.id, tenantId },
-        data: { graduationId: input.graduationId },
-      });
+      const result = await ctx.prisma.student
+        .updateMany({
+          where: { id: input.id, tenantId },
+          data: { graduationId: input.graduationId },
+        })
+        .catch((err: unknown) => {
+          throw traduzirFaixaSumida(err);
+        });
 
       if (result.count === 0) {
         throw new TRPCError({
@@ -473,9 +516,7 @@ export const studentRouter = createTRPCRouter({
           payments: {
             orderBy: { dueDate: 'asc' },
             include: {
-              enrollment: {
-                select: { modality: { select: { id: true, name: true } } },
-              },
+              enrollment: { select: enrollmentModalitySelect },
             },
           },
           FinanceEntry: {
@@ -649,6 +690,7 @@ export const studentRouter = createTRPCRouter({
 
         return { ok: true, ...result };
       } catch (error) {
+        if (error instanceof TRPCError) throw error;
         console.error('Erro ao trocar o plano do aluno:', error);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
@@ -694,6 +736,7 @@ export const studentRouter = createTRPCRouter({
 
         return { ok: true, cancelled };
       } catch (error) {
+        if (error instanceof TRPCError) throw error;
         console.error('Erro ao cancelar a matrícula:', error);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',

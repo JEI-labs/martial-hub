@@ -4,13 +4,13 @@ import {
   EPaymentMethod,
   EPlanBilling,
   PaymentStatus,
+  Prisma,
   type Plan,
   type PlanModalityPrice,
-  type Prisma,
   type PrismaClient,
 } from '@prisma/client';
 import { TRPCError } from '@trpc/server';
-import { format } from 'date-fns';
+import { addMonths, format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 import { comDesconto, precoNaModalidade } from '@/common/utils/pricing';
@@ -23,6 +23,15 @@ export const enrollmentInclude = {
   plan: true,
   modality: { select: { id: true, name: true, position: true } },
 } satisfies Prisma.EnrollmentInclude;
+
+/**
+ * A modalidade de uma matrícula, para quem só precisa dizer de qual
+ * modalidade é uma parcela. Um lugar só, para um campo novo chegar a todas
+ * as telas que mostram parcela.
+ */
+export const enrollmentModalitySelect = {
+  modality: { select: { id: true, name: true } },
+} satisfies Prisma.EnrollmentSelect;
 
 /**
  * Confere modalidade e plano antes de matricular: os ids chegam do navegador,
@@ -143,19 +152,35 @@ export async function matricular(
     discountPercent,
   );
 
-  const enrollment = await tx.enrollment.create({
-    data: {
-      studentId: student.id,
-      modalityId: modality.id,
-      planId: plan.id,
-      price,
-      discountPercent,
-      startDate,
-      endDate: new Date(
-        new Date(startDate).setMonth(startDate.getMonth() + plan.duration),
-      ),
-    },
-  });
+  /* `addMonths` e não `setMonth`: começar em 31/01 dava vencimento em 03/03
+     (o 31/02 transborda), fevereiro sem parcela e março com duas. O
+     date-fns para no último dia do mês: 31/01, 28/02, 31/03. */
+  const enrollment = await tx.enrollment
+    .create({
+      data: {
+        studentId: student.id,
+        modalityId: modality.id,
+        planId: plan.id,
+        price,
+        discountPercent,
+        startDate,
+        endDate: addMonths(startDate, plan.duration),
+      },
+    })
+    .catch((err: unknown) => {
+      /* O índice único parcial (uma matrícula ativa por aluno e modalidade)
+         desempata dois pedidos simultâneos: o segundo cai aqui. */
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        throw new TRPCError({
+          code: 'CONFLICT',
+          message: `${student.name} já está matriculado em ${modality.name}. Para mudar o plano, use a troca de plano.`,
+        });
+      }
+      throw err;
+    });
 
   const amounts = splitIntoInstallments(
     price,
@@ -164,8 +189,7 @@ export async function matricular(
 
   await tx.payment.createMany({
     data: amounts.map((cents, index) => {
-      const dueDate = new Date(startDate);
-      dueDate.setMonth(dueDate.getMonth() + index);
+      const dueDate = addMonths(startDate, index);
       return {
         studentId: student.id,
         enrollmentId: enrollment.id,
@@ -216,10 +240,22 @@ export async function encerrarMatricula(
   enrollmentId: string,
   quando: Date,
 ) {
-  await tx.enrollment.update({
-    where: { id: enrollmentId },
+  /* Só encerra o que ainda está ativo. Dois "trocar plano" (ou troca e
+     cancelamento) ao mesmo tempo leram a matrícula ativa fora da transação;
+     o segundo espera o primeiro no lock da linha, não acha mais nada ativo e
+     desiste — em vez de encerrar de novo e abrir uma segunda matrícula. */
+  const encerrada = await tx.enrollment.updateMany({
+    where: { id: enrollmentId, isActive: true },
     data: { isActive: false, endDate: quando },
   });
+
+  if (encerrada.count === 0) {
+    throw new TRPCError({
+      code: 'CONFLICT',
+      message:
+        'Esta matrícula acabou de ser alterada por outra pessoa. Recarregue a página.',
+    });
+  }
 
   const removidas = await tx.payment.deleteMany({
     where: {
