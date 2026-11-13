@@ -67,10 +67,10 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
 
   /* As modalidades ativas, na ordem da academia: cada uma pode virar uma
      matrícula, tenha faixa ou não (boxe também se matricula). */
-  const { data: modalidades } = api.modalities.list.useQuery(undefined, {
+  const modalidadesApi = api.modalities.list.useQuery(undefined, {
     staleTime: 60_000,
   });
-  const modalidadesAtivas = (modalidades ?? [])
+  const modalidadesAtivas = (modalidadesApi.data ?? [])
     .filter((m) => m.isActive)
     .map(({ id, name }) => ({ id, name }));
   const enrollmentsError =
@@ -212,6 +212,9 @@ export const SheetCreateStudent: React.FC<SheetCreateStudentProps> = ({
             control={form.control}
             setValue={form.setValue}
             modalidades={modalidadesAtivas}
+            carregando={modalidadesApi.isLoading}
+            erro={modalidadesApi.isError && !modalidadesApi.data}
+            tentarDeNovo={() => void modalidadesApi.refetch()}
             planos={(plansData?.data ?? []).map((plan) => ({
               ...plan,
               price: Number(plan.price),

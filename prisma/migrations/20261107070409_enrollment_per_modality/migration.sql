@@ -2,9 +2,9 @@
 -- Quem faz muay thai e boxe tem duas matrículas, cada uma com o seu plano e as
 -- suas parcelas: cancelar uma não mexe na outra.
 --
--- Regras desta migration: nenhuma matrícula fica sem modalidade, nenhuma
--- parcela muda de valor, e toda parcela de aluno matriculado fica ligada a uma
--- matrícula. Os passos 4 e 8 conferem isso; se a conta não fechar, a migration
+-- Regras desta migration: nenhuma matrícula fica sem modalidade, nenhum aluno
+-- fica com duas ativas na mesma modalidade, nenhuma parcela muda de valor, e
+-- toda parcela de aluno matriculado fica ligada a uma matrícula. Os passos 4 e 8 conferem isso; se a conta não fechar, a migration
 -- inteira aborta.
 
 -- 0. O retrato de antes, para a conferência do fim.
@@ -16,9 +16,11 @@ ALTER TABLE "Enrollment" ADD COLUMN "modalityId" TEXT;
 
 -- 2. Rede de segurança: academia com matrícula e sem modalidade nenhuma (só
 -- possível em academia criada sem modalidade escolhida, antes desta migration)
--- ganha um Muay Thai desativado — era o que o sistema assumia até aqui.
+-- ganha um Muay Thai — era o que o sistema assumia até aqui. Ativo: é a única
+-- modalidade dela, e desativado a academia ficaria sem ter onde matricular
+-- (e sem poder criar "Muay Thai", que já existiria escondido).
 INSERT INTO "Modality" ("id", "name", "slug", "isActive", "position", "updatedAt", "tenantId")
-SELECT gen_random_uuid(), 'Muay Thai', 'muay-thai', false, 0, CURRENT_TIMESTAMP, t."id"
+SELECT gen_random_uuid(), 'Muay Thai', 'muay-thai', true, 0, CURRENT_TIMESTAMP, t."id"
 FROM "Tenant" t
 WHERE EXISTS (
         SELECT 1 FROM "Enrollment" e JOIN "Student" s ON s."id" = e."studentId"
@@ -28,14 +30,18 @@ WHERE EXISTS (
 
 -- 3. Toda matrícula existente fica na modalidade que a academia tinha: o
 -- Muay Thai, que o backfill das modalidades deu a todas. Se ele foi renomeado
--- (o slug muda junto), fica na primeira modalidade da academia, ativas antes.
+-- (o slug muda junto), fica no mesmo que a migration das graduações escolheu
+-- para as faixas: nome com "muay" ou "thai", senão a modalidade mais antiga
+-- (a do backfill) — a posição muda quando o dono reordena, a idade não.
 UPDATE "Enrollment" e
 SET "modalityId" = (
   SELECT m."id"
   FROM "Modality" m
   JOIN "Student" s ON s."tenantId" = m."tenantId"
   WHERE s."id" = e."studentId"
-  ORDER BY (m."slug" = 'muay-thai') DESC, m."isActive" DESC, m."position" ASC, m."createdAt" ASC
+  ORDER BY (m."slug" = 'muay-thai') DESC,
+           (m."slug" LIKE '%muay%' OR m."slug" LIKE '%thai%') DESC,
+           m."createdAt" ASC, m."isActive" DESC, m."position" ASC
   LIMIT 1
 );
 
@@ -52,6 +58,31 @@ END $$;
 
 ALTER TABLE "Enrollment" ALTER COLUMN "modalityId" SET NOT NULL;
 
+-- 4b. Uma matrícula ativa por aluno e modalidade. Antes desta migration a
+-- matrícula não tinha modalidade, e um aluno podia ficar com mais de uma
+-- ativa (a tela usava a mais recente); agora todas caíram na mesma
+-- modalidade. Fica ativa a mais recente, como a tela já mostrava, e as
+-- outras são encerradas — as parcelas delas não mudam.
+WITH "excedentes" AS (
+  SELECT "id", ROW_NUMBER() OVER (
+    PARTITION BY "studentId", "modalityId"
+    ORDER BY "startDate" DESC, "createdAt" DESC
+  ) AS "ordem"
+  FROM "Enrollment"
+  WHERE "isActive"
+)
+UPDATE "Enrollment" e
+SET "isActive" = false
+FROM "excedentes" x
+WHERE x."id" = e."id" AND x."ordem" > 1;
+
+-- O índice é a garantia contra dois pedidos simultâneos: no READ COMMITTED
+-- do Postgres, a busca por "já tem matrícula ativa" dentro da transação não
+-- impede os dois inserts. O Prisma não descreve índice parcial no schema;
+-- por isso ele mora só aqui (ver o comentário em `model Enrollment`).
+CREATE UNIQUE INDEX "Enrollment_studentId_modalityId_active_key"
+  ON "Enrollment" ("studentId", "modalityId") WHERE "isActive";
+
 CREATE INDEX "Enrollment_studentId_isActive_idx" ON "Enrollment"("studentId", "isActive");
 
 CREATE INDEX "Enrollment_modalityId_idx" ON "Enrollment"("modalityId");
@@ -59,6 +90,14 @@ CREATE INDEX "Enrollment_modalityId_idx" ON "Enrollment"("modalityId");
 -- NO ACTION: apagar modalidade com matrícula é recusado, em vez de levar o
 -- histórico do aluno junto.
 ALTER TABLE "Enrollment" ADD CONSTRAINT "Enrollment_modalityId_fkey" FOREIGN KEY ("modalityId") REFERENCES "Modality"("id") ON DELETE NO ACTION ON UPDATE CASCADE;
+
+-- O mesmo para o plano, que era CASCADE: excluir um plano apagava as
+-- matrículas nele, e as parcelas delas viravam parcelas soltas. NO ACTION, e
+-- não RESTRICT, porque a exclusão da academia apaga planos e matrículas no
+-- mesmo comando: o NO ACTION confere no fim dele, quando as matrículas já
+-- foram junto; o RESTRICT confere linha a linha e barraria a cascata.
+ALTER TABLE "Enrollment" DROP CONSTRAINT "Enrollment_planId_fkey";
+ALTER TABLE "Enrollment" ADD CONSTRAINT "Enrollment_planId_fkey" FOREIGN KEY ("planId") REFERENCES "Plan"("id") ON DELETE NO ACTION ON UPDATE CASCADE;
 
 -- 5. A matrícula da parcela.
 ALTER TABLE "Payment" ADD COLUMN "enrollmentId" TEXT;

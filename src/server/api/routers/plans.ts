@@ -134,9 +134,25 @@ export const plansRouter = createTRPCRouter({
         });
       }
 
-      await ctx.prisma.plan.delete({
-        where: { id: input.id, tenantId },
-      });
+      try {
+        await ctx.prisma.plan.delete({
+          where: { id: input.id, tenantId },
+        });
+      } catch (err) {
+        /* O FK da matrícula recusa: excluir o plano apagaria as matrículas
+           nele (e soltaria as parcelas delas), inclusive as encerradas. */
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2003'
+        ) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message:
+              'Este plano está em matrículas de alunos, contando as encerradas, e não pode ser excluído.',
+          });
+        }
+        throw err;
+      }
 
       return { ok: true };
     }),

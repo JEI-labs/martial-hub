@@ -27,6 +27,7 @@ import {
   conferirModalidadeEPlano,
   encerrarMatricula,
   enrollmentInclude,
+  enrollmentModalitySelect,
   matricular,
 } from '@/server/enrollments';
 import { deriveStudentStatus } from '@/server/utils/studentStatus';
@@ -144,8 +145,10 @@ export const studentRouter = createTRPCRouter({
       const category = await categoriaDeAlunos(ctx.prisma, tenantId);
 
       return ctx.prisma.$transaction(async (tx) => {
-        /* Dentro da transação: dois cliques seguidos não podem abrir duas
-           matrículas ativas na mesma modalidade. */
+        /* A mensagem amigável para o caso comum. Quem garante de verdade é
+           o índice único parcial em (studentId, modalityId) das ativas: no
+           READ COMMITTED, dois pedidos simultâneos passam os dois por esta
+           busca, e o segundo insert é recusado (ver `matricular`). */
         const jaTem = await tx.enrollment.findFirst({
           where: {
             studentId: student.id,
@@ -484,9 +487,7 @@ export const studentRouter = createTRPCRouter({
           payments: {
             orderBy: { dueDate: 'asc' },
             include: {
-              enrollment: {
-                select: { modality: { select: { id: true, name: true } } },
-              },
+              enrollment: { select: enrollmentModalitySelect },
             },
           },
           FinanceEntry: {
@@ -649,6 +650,7 @@ export const studentRouter = createTRPCRouter({
 
         return { ok: true, ...result };
       } catch (error) {
+        if (error instanceof TRPCError) throw error;
         console.error('Erro ao trocar o plano do aluno:', error);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',
@@ -694,6 +696,7 @@ export const studentRouter = createTRPCRouter({
 
         return { ok: true, cancelled };
       } catch (error) {
+        if (error instanceof TRPCError) throw error;
         console.error('Erro ao cancelar a matrícula:', error);
         throw new TRPCError({
           code: 'INTERNAL_SERVER_ERROR',

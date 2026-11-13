@@ -387,10 +387,18 @@ model Enrollment {
   modality   Modality @relation(fields: [modalityId], references: [id], onDelete: NoAction)
 
   student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  plan    Plan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  /// NoAction pelo mesmo motivo: excluir um plano apagava as matrículas nele
+  /// e soltava as parcelas delas. (Restrict barraria a exclusão da academia,
+  /// que apaga planos e matrículas no mesmo comando.)
+  plan    Plan    @relation(fields: [planId], references: [id], onDelete: NoAction)
 
   payments Payment[]
 
+  /// Também existe, só no SQL da migration `enrollment_per_modality`, o
+  /// índice único parcial `Enrollment_studentId_modalityId_active_key`:
+  /// (studentId, modalityId) WHERE isActive — uma matrícula ativa por aluno
+  /// e modalidade. O Prisma não descreve índice parcial, mas também não o
+  /// apaga: o `migrate diff` contra este schema sai vazio.
   @@index([studentId, isActive])
   @@index([modalityId])
 }
